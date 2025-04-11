@@ -4,10 +4,10 @@ default: all
 
 all: build
 
-TAGS ?= llama_3_1
+TAGS ?= in_memory
 
-MODEL ?= ./llama-3.1.go
+CTX ?= inmemory.go
 
-test: ; tinygo test --tags $(TAGS) -target wasip2 --wit-package ./wit/ --wit-world llm ./.
+test: ; tinygo test --tags $(TAGS) -target wasip2 --wit-package ./wit/ --wit-world ctx ./.
 
-build: ; tinygo build --tags $(TAGS) -target wasip2 --wit-package ./wit/ --wit-world llm ./$(MODEL)
+build: ; tinygo build --tags $(TAGS) -target wasip2 --wit-package ./wit/ --wit-world ctx $(CTX)

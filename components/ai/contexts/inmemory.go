@@ -43,3 +43,5 @@ func (c *inMemoryContext) Next() (*ai.Message, error) {
 	}
 	return c.context[len(c.context)-1], nil
 }
+
+func main() {}
