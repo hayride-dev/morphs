@@ -5,11 +5,11 @@ package main
 import (
 	"fmt"
 
-	"github.com/hayride-dev/agents/go/tools/datetime"
 	"github.com/hayride-dev/bindings/go/exports/ai/agent"
 	"github.com/hayride-dev/bindings/go/imports/ai/ctx"
 	"github.com/hayride-dev/bindings/go/imports/ai/model"
 	"github.com/hayride-dev/bindings/go/shared/domain/ai"
+	"github.com/hayride-dev/moprhs/components/ai/tools/datetime/pkg/datetime"
 )
 
 const maxTurns = 10
