@@ -29,7 +29,7 @@ func invoke(ctx ctx.Context, model model.Model) ([]*ai.Message, error) {
 	}
 	// agent loop
 	turns := 0
-	for turns <= maxTurns {
+	for turns < maxTurns {
 		msg, err := model.Compute(msgs)
 		if err != nil {
 			return nil, err
