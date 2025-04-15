@@ -21,5 +21,12 @@
 go.work
 go.work.sum
 
+# Rust target dirs
+target/
+
 # env file
 .env
+
+#wasm files 
+*.wasm
+*.wat

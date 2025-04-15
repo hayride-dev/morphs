@@ -1,0 +1,21 @@
+package hayride:runners@0.0.1;
+
+world cli {
+    include hayride:wasip2/imports@0.0.41;
+    include hayride:wasip2/exports@0.0.41;
+    
+    import hayride:ai/graph-stream@0.0.41;
+    import hayride:ai/context@0.0.41;
+    import hayride:ai/model@0.0.41;
+    import hayride:ai/agent@0.0.41;
+}
+
+world http {
+    include hayride:wasip2/imports@0.0.41;
+    export wasi:http/incoming-handler@0.2.0;
+   
+    import hayride:ai/graph-stream@0.0.41;
+    import hayride:ai/context@0.0.41;
+    import hayride:ai/model@0.0.41;
+    import hayride:ai/agent@0.0.41;
+}
