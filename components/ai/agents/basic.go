@@ -59,7 +59,7 @@ func invoke(ctx ctx.Context, model model.Model) ([]*ai.Message, error) {
 							})
 						}
 					default:
-						return nil, fmt.Errorf("unknown tool use: ")
+						return nil, fmt.Errorf("unknown tool use: %s", c.ID)
 					}
 				} else {
 					// no tool input, end the loop
