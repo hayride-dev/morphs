@@ -21,6 +21,9 @@
 go.work
 go.work.sum
 
+# Rust target dirs
+target/
+
 # env file
 .env
 
