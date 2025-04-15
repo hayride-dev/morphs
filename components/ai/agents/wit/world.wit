@@ -5,5 +5,7 @@ world agent {
     import hayride:ai/context@0.0.41;
     import hayride:ai/model@0.0.41;
 
+    import hayride:datetime/datetime@0.0.1;
+
     export hayride:ai/agent@0.0.41;
 }
