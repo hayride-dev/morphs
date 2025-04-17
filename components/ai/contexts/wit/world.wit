@@ -1,6 +1,6 @@
 package hayride:contexts@0.0.1;
 
 world ctx {
-    include hayride:wasip2/imports@0.0.41;
-    export hayride:ai/context@0.0.41;
+    include hayride:wasip2/imports@0.0.42;
+    export hayride:ai/context@0.0.42;
 }

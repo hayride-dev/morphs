@@ -14,25 +14,63 @@ import (
 
 const maxTurns = 10
 
-func init() {
+var modelResource model.Model
 
-	instructions := `You are a tool calling agent.
-	Use the tools you have to try to answer the user's question.
-	`
-	agent.Export("basic", instructions, invoke)
+type BasicAgent struct {
+	model model.Model
+	ctx   ctx.Context
 }
 
-func invoke(ctx ctx.Context, model model.Model) ([]*ai.Message, error) {
-	msgs, err := ctx.Messages()
+var basicAgent BasicAgent
+
+func init() {
+	// Create model
+	model, err := model.New(model.WithName("Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf"))
 	if err != nil {
-		return nil, err
+		panic(err)
+	}
+
+	// Create context and push system message
+	instructions := `You are a tool calling agent.
+	Use the tools you have to try to answer the user's question.	`
+
+	context := ctx.NewContext()
+	context.Push(&ai.Message{
+		Role: ai.RoleSystem,
+		Content: []ai.Content{
+			&ai.TextContent{
+				Text: instructions,
+			},
+		},
+	})
+
+	basicAgent = BasicAgent{
+		model: model,
+		ctx:   context,
+	}
+
+	agent.Export("basic", invoke)
+}
+
+func invoke(message []*ai.Message) ([]*ai.Message, error) {
+	if err := basicAgent.ctx.Push(message...); err != nil {
+		return nil, fmt.Errorf("failed to push message: %w", err)
+	}
+
+	msgs, err := basicAgent.ctx.Messages()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get messages: %w", err)
 	}
 	// agent loop
 	turns := 0
 	for turns < maxTurns {
-		msg, err := model.Compute(msgs)
+		msg, err := basicAgent.model.Compute(msgs)
 		if err != nil {
 			return nil, err
+		}
+
+		if err := basicAgent.ctx.Push(msg); err != nil {
+			return nil, fmt.Errorf("failed to push response message: %w", err)
 		}
 
 		switch msg.Role {
@@ -46,7 +84,7 @@ func invoke(ctx ctx.Context, model model.Model) ([]*ai.Message, error) {
 
 							value := datetime.Date()
 
-							ctx.Push(&ai.Message{
+							basicAgent.ctx.Push(&ai.Message{
 								Role: ai.RoleTool,
 								Content: []ai.Content{
 									&ai.ToolOutput{
