@@ -24,10 +24,6 @@ func init() {
 
 func (c *inMemoryContext) Push(messages ...*ai.Message) error {
 	for _, m := range messages {
-		if m.Role == ai.RoleSystem {
-			c.context[0] = m
-			continue
-		}
 		c.context = append(c.context, m)
 	}
 	return nil
