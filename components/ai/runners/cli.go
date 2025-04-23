@@ -8,15 +8,16 @@ import (
 	"os"
 	"strings"
 
-	"github.com/hayride-dev/bindings/go/imports/ai/agent"
-	"github.com/hayride-dev/bindings/go/shared/domain/ai"
+	"github.com/hayride-dev/bindings/go/gen/types/hayride/ai/types"
+	"github.com/hayride-dev/bindings/go/imports/ai/agents"
+	"go.bytecodealliance.org/cm"
 )
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("What can I help with?")
 
-	a := agent.NewAgent()
+	a := agents.NewAgent()
 
 	turn := 0
 	for {
@@ -30,17 +31,17 @@ func main() {
 			break
 		}
 
-		msg := &ai.Message{
-			Role: ai.RoleUser,
-			Content: []ai.Content{
-				&ai.TextContent{
+		msg := types.Message{
+			Role: types.RoleUser,
+			Content: cm.ToList([]types.Content{
+				types.ContentText(types.TextContent{
 					Text:        input,
 					ContentType: "text/plain",
-				},
-			},
+				}),
+			}),
 		}
 
-		response, err := a.Invoke([]*ai.Message{msg})
+		response, err := a.Invoke([]types.Message{msg})
 
 		if err != nil {
 			fmt.Println("error invoking agent:", err)
