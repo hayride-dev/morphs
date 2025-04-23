@@ -7,8 +7,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/hayride-dev/bindings/go/exports/ai/model"
-	"github.com/hayride-dev/bindings/go/shared/domain/ai"
+	"github.com/hayride-dev/bindings/go/exports/ai/models"
+	"github.com/hayride-dev/bindings/go/gen/types/hayride/ai/types"
+	"go.bytecodealliance.org/cm"
 )
 
 var (
@@ -74,16 +75,16 @@ const (
 	env = "Environment: ipython"
 )
 
-var _ model.Formatter = &llama_3_1{}
+var _ models.Formatter = &llama_3_1{}
 
 func init() {
 	m := &llama_3_1{}
-	model.Export(m)
+	models.Export(m)
 }
 
 type llama_3_1 struct{}
 
-func (m *llama_3_1) Decode(data []byte) (*ai.Message, error) {
+func (m *llama_3_1) Decode(data []byte) (types.Message, error) {
 	msg := string(data)
 	if strings.Contains(msg, pythonTag) {
 		// remove python tags
@@ -92,7 +93,7 @@ func (m *llama_3_1) Decode(data []byte) (*ai.Message, error) {
 
 		matches := parseFunc.FindStringSubmatch(strings.TrimSpace(content))
 		if len(matches) != 3 {
-			return nil, fmt.Errorf("failed to parse assistant message, invalid function formation")
+			return types.Message{}, fmt.Errorf("failed to parse assistant message, invalid function formation")
 		}
 
 		pkg := matches[0]
@@ -105,7 +106,7 @@ func (m *llama_3_1) Decode(data []byte) (*ai.Message, error) {
 			// Split each parameter into name and value
 			paramParts := strings.SplitN(param, "=", 2)
 			if len(paramParts) != 2 {
-				return nil, fmt.Errorf("parameter format is invalid: %s", param)
+				return types.Message{}, fmt.Errorf("parameter format is invalid: %s", param)
 			}
 			// Trim spaces and quotes from value
 			paramValue := strings.TrimSpace(paramParts[1])
@@ -113,22 +114,22 @@ func (m *llama_3_1) Decode(data []byte) (*ai.Message, error) {
 			paramValue = strings.Trim(paramValue, "\"")
 			args = append(args, paramValue)
 		}
-		return &ai.Message{
-			Role: ai.RoleAssistant,
-			Content: []ai.Content{
-				&ai.ToolInput{
+		return types.Message{
+			Role: types.RoleAssistant,
+			Content: cm.ToList([]types.Content{
+				types.ContentToolInput(types.ToolInput{
 					ID:          pkg,
 					Name:        name,
 					Input:       strings.Join(args, ","),
 					ContentType: "tool-input",
-				},
-			},
+				}),
+			}),
 		}, nil
 	} else if strings.Contains(msg, "<function") {
 		// Custom function definition
 		matches := customFunc.FindStringSubmatch(msg)
 		if len(matches) != 4 {
-			return nil, fmt.Errorf("failed to parse assistant message, invalid function formation")
+			return types.Message{}, fmt.Errorf("failed to parse assistant message, invalid function formation")
 		}
 
 		if matches != nil {
@@ -139,40 +140,40 @@ func (m *llama_3_1) Decode(data []byte) (*ai.Message, error) {
 				}
 			}
 
-			return &ai.Message{
-				Role: ai.RoleAssistant,
-				Content: []ai.Content{
-					&ai.ToolInput{
+			return types.Message{
+				Role: types.RoleAssistant,
+				Content: cm.ToList([]types.Content{
+					types.ContentToolInput(types.ToolInput{
 						ID:          result["pkg"],
 						Name:        result["name"],
 						Input:       result["input"],
 						ContentType: "tool-input",
-					},
-				},
+					}),
+				}),
 			}, nil
 		} else {
-			return nil, fmt.Errorf("failed to parse assistant message, invalid function formation")
+			return types.Message{}, fmt.Errorf("failed to parse assistant message, invalid function formation")
 		}
 	}
 
-	return &ai.Message{
-		Role: ai.RoleAssistant,
-		Content: []ai.Content{
-			&ai.TextContent{
+	return types.Message{
+		Role: types.RoleAssistant,
+		Content: cm.ToList([]types.Content{
+			types.ContentText(types.TextContent{
 				Text:        msg,
 				ContentType: "text",
-			},
-		},
+			}),
+		}),
 	}, nil
 }
 
-func (m *llama_3_1) Encode(messages ...*ai.Message) ([]byte, error) {
+func (m *llama_3_1) Encode(messages ...types.Message) ([]byte, error) {
 	builder := &strings.Builder{}
 	last := len(messages) - 1
 	for i, msg := range messages {
 		//builder.WriteString("<|begin_of_text|>")
 		switch msg.Role {
-		case ai.RoleSystem:
+		case types.RoleSystem:
 			// set the system message
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, system, endHeaderId))
 			// add environment token to enable tools by default
@@ -180,14 +181,14 @@ func (m *llama_3_1) Encode(messages ...*ai.Message) ([]byte, error) {
 			builder.WriteString(fmt.Sprintf("%s\n", env))
 
 			// message body, collect tool schema definitions
-			tools := []*ai.ToolSchema{}
-			for _, content := range msg.Content {
-				switch content.Type() {
+			tools := []*types.ToolSchema{}
+			for _, content := range msg.Content.Slice() {
+				switch content.String() {
 				case "text":
-					c := content.(*ai.TextContent)
+					c := content.Text()
 					builder.WriteString(fmt.Sprintf("%s\n", c.Text))
 				case "tool-schema":
-					c := content.(*ai.ToolSchema)
+					c := content.ToolSchema()
 					tools = append(tools, c)
 				}
 			}
@@ -201,43 +202,43 @@ func (m *llama_3_1) Encode(messages ...*ai.Message) ([]byte, error) {
 
 			// end system message turn
 			builder.WriteString(endOfTurn)
-		case ai.RoleUser:
+		case types.RoleUser:
 			// header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, user, endHeaderId))
 			// message body ( user prompt )
-			for _, content := range msg.Content {
-				if content.Type() == "text" {
-					c := content.(*ai.TextContent)
+			for _, content := range msg.Content.Slice() {
+				if content.String() == "text" {
+					c := content.Text()
 					builder.WriteString(fmt.Sprintf("%s\n", c.Text))
 				}
 			}
 			// end turn
 			builder.WriteString(endOfTurn)
-		case ai.RoleAssistant:
+		case types.RoleAssistant:
 			// header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, assistant, endHeaderId))
 			// message body ( assistant response )
-			for _, content := range msg.Content {
-				switch content.Type() {
+			for _, content := range msg.Content.Slice() {
+				switch content.String() {
 				case "text":
-					c := content.(*ai.TextContent)
+					c := content.Text()
 					builder.WriteString(fmt.Sprintf("%s\n", c.Text))
 					builder.WriteString(endOfTurn)
 				case "tool-input":
-					c := content.(*ai.ToolInput)
+					c := content.ToolInput()
 					// TODO : support other function call ai
 					builder.WriteString(fmt.Sprintf("<function=%s %s>%s<\\function>\n", c.ID, c.Name, c.Input))
 					// end turn
 					builder.WriteString(endOfMessage)
 				}
 			}
-		case ai.RoleTool:
+		case types.RoleTool:
 			// header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, tool, endHeaderId))
 			// message body ( tool output )
-			for _, content := range msg.Content {
-				if content.Type() == "tool-output" {
-					c := content.(*ai.ToolOutput)
+			for _, content := range msg.Content.Slice() {
+				if content.String() == "tool-output" {
+					c := content.ToolOutput()
 					builder.WriteString(fmt.Sprintf("%s\n", c.Output))
 				}
 			}
@@ -247,7 +248,7 @@ func (m *llama_3_1) Encode(messages ...*ai.Message) ([]byte, error) {
 			return nil, fmt.Errorf("unknown supported message role: %v", msg.Role)
 		}
 		if i == last {
-			if msg.Role != ai.RoleAssistant {
+			if msg.Role != types.RoleAssistant {
 				builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, assistant, endHeaderId))
 			}
 		}
@@ -255,7 +256,7 @@ func (m *llama_3_1) Encode(messages ...*ai.Message) ([]byte, error) {
 	return []byte(builder.String()), nil
 }
 
-func customToolEncode(tools []*ai.ToolSchema) string {
+func customToolEncode(tools []*types.ToolSchema) string {
 	if len(tools) == 0 {
 		return ""
 	}
