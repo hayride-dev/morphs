@@ -10,30 +10,21 @@ import (
 	"os"
 
 	"github.com/hayride-dev/bindings/go/exports/net/http/handle"
-	"github.com/hayride-dev/bindings/go/imports/ai/agent"
-	"github.com/hayride-dev/bindings/go/imports/ai/ctx"
-	"github.com/hayride-dev/bindings/go/imports/ai/model"
-	"github.com/hayride-dev/bindings/go/shared/domain/ai"
+	"github.com/hayride-dev/bindings/go/gen/types/hayride/ai/types"
+	"github.com/hayride-dev/bindings/go/imports/ai/agents"
 )
 
 type promptReq struct {
-	msgs []*ai.Message `json:"messages"`
+	msgs []types.Message `json:"messages"`
 }
 
 type promptResp struct {
-	result []*ai.Message `json:"result"`
+	result []types.Message `json:"result"`
 }
 
 func init() {
-	model, err := model.New(model.WithName("Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf"))
-	if err != nil {
-		fmt.Println("error loading model agent:", err)
-		os.Exit(1)
-	}
 	h := &handler{
-		agent: agent.NewAgent(),
-		model: model,
-		ctx:   ctx.NewContext(),
+		agent: agents.NewAgent(),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/generate", h.handlerfunc)
@@ -41,9 +32,7 @@ func init() {
 }
 
 type handler struct {
-	agent agent.Agent
-	model model.Model
-	ctx   ctx.Context
+	agent agents.Agent
 }
 
 func (h *handler) handlerfunc(w http.ResponseWriter, r *http.Request) {
@@ -57,9 +46,8 @@ func (h *handler) handlerfunc(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(b, req); err != nil {
 		http.Error(w, "failed to unmarshal request body: "+err.Error(), http.StatusBadRequest)
 	}
-	h.ctx.Push(req.msgs...)
 
-	response, err := h.agent.Invoke(h.ctx, h.model)
+	response, err := h.agent.Invoke(req.msgs)
 	if err != nil {
 		fmt.Println("error invoking agent:", err)
 		os.Exit(1)

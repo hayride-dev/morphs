@@ -1,2 +1,3 @@
-wasip2 = "https://github.com/hayride-dev/coven/releases/download/v0.0.41/hayride_wasip2_v0.0.41.tar.gz"
-ai = "https://github.com/hayride-dev/coven/releases/download/v0.0.41/hayride_ai_v0.0.41.tar.gz"
+wasip2 = "https://github.com/hayride-dev/coven/releases/download/v0.0.43/hayride_wasip2_v0.0.43.tar.gz"
+ai = "https://github.com/hayride-dev/coven/releases/download/v0.0.43/hayride_ai_v0.0.43.tar.gz"
+datetime = "../../tools/datetime/wit"

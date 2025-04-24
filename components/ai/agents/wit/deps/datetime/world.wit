@@ -1,0 +1,14 @@
+
+package hayride:datetime@0.0.1;
+
+interface datetime {
+    date: func() -> string;
+}
+
+world exports {
+    export datetime;
+}
+
+world imports {
+    import datetime;
+}

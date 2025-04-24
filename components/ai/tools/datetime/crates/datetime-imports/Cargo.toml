@@ -1,0 +1,19 @@
+[package]
+name = "datetime-imports"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wit-bindgen-rt = { version = "0.41.0", features = ["bitflags"] }
+
+[lib]
+crate-type = ["cdylib"]
+
+[package.metadata.component]
+package = "hayride:datetime"
+
+[package.metadata.component.target]
+path = "../../wit"
+world = "imports"
+
+[package.metadata.component.dependencies]
