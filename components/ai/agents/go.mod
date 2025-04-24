@@ -9,4 +9,4 @@ require (
 	github.com/hayride-dev/morphs/components/ai/tools/datetime v0.0.0
 )
 
-require go.bytecodealliance.org/cm v0.2.2 // indirect
+require go.bytecodealliance.org/cm v0.2.2

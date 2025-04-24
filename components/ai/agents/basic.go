@@ -63,6 +63,7 @@ func invoke(message []types.Message) ([]types.Message, error) {
 		return nil, fmt.Errorf("failed to get messages: %w", err)
 	}
 	// agent loop
+	var results []types.Message
 	turns := 0
 	for turns < maxTurns {
 		msg, err := basicAgent.model.Compute(msgs)
@@ -73,6 +74,8 @@ func invoke(message []types.Message) ([]types.Message, error) {
 		if err := basicAgent.ctx.Push(*msg); err != nil {
 			return nil, fmt.Errorf("failed to push response message: %w", err)
 		}
+
+		results = append(results, *msg)
 
 		switch msg.Role {
 		case types.RoleAssistant:
@@ -102,7 +105,7 @@ func invoke(message []types.Message) ([]types.Message, error) {
 					}
 				} else {
 					// no tool input, end the loop
-					return nil, nil
+					return results, nil
 				}
 			}
 		}
