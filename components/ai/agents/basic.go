@@ -50,7 +50,7 @@ func init() {
 		ctx:   context,
 	}
 
-	agents.Export("basic", invoke)
+	agents.Export(agents.WithName("basic"), agents.WithInvokeFunc(invoke))
 }
 
 func invoke(message []types.Message) ([]types.Message, error) {
