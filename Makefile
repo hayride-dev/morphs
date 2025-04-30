@@ -1,6 +1,6 @@
 .PHONY: build $(SUBDIRS)
 
-SUBDIRS := $(shell find . -mindepth 1 -maxdepth 3 -type d -exec test -f '{}/Makefile' \; -print)
+SUBDIRS := $(shell find . -mindepth 1 -maxdepth 4 -type d -exec test -f '{}/Makefile' \; -print)
 
 all: build
 
