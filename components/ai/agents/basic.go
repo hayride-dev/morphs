@@ -88,8 +88,9 @@ func invoke(message []types.Message, w io.Writer) error {
 			return err
 		}
 
-		w.Write(b)
-
+		if _, err := w.Write(b); err != nil {
+			return fmt.Errorf("failed to write message: %w", err)
+		}
 		switch msg.Role {
 		case types.RoleAssistant:
 			for _, content := range msg.Content.Slice() {
