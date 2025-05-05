@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	reader := bufio.NewReader(cli.GetStdin())
+	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("What can I help with?")
 	a := agents.NewAgent()
 
@@ -37,12 +37,12 @@ func main() {
 			}),
 		}
 
-		err := a.InvokeStream([]types.Message{msg}, cli.GetStdout())
+		err := a.InvokeStream([]types.Message{msg}, cli.GetStdout(true))
 		if err != nil {
 			fmt.Println("error invoking agent:", err)
 			os.Exit(1)
 		}
 
-		fmt.Println("What else can I help with? (type 'exit' to quit)")
+		fmt.Println("\nWhat else can I help with? (type 'exit' to quit)")
 	}
 }
