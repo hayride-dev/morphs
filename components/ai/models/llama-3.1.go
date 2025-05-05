@@ -19,7 +19,7 @@ var (
 
 	// The function definition for a custom defined function for llama 3.1
 	// Example: <function=example:id/package example_function_name>{"example_name": "example_value"}</function>
-	customFunc = regexp.MustCompile(`<function=(?P<pkg>[^\s>]+)\s+(?P<name>[^\s>]+)>\s*(?P<input>\{.*\})\s*<\/function>`)
+	customFunc = regexp.MustCompile(`<function=(?P<pkg>[^\s>]+)\s+(?P<name>[^\s>]+)>\s*(?P<input>\{.*?\})?\s*<.*function>`)
 
 	// Split the parameters by comma
 	parseFuncParams = regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*=('[^']*'|"[^"]*"|[^,]+)`)
