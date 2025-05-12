@@ -1,0 +1,8 @@
+package hayride-examples:http@0.0.1;
+
+world server {
+    include hayride:wasip2/imports@0.0.47;
+    include hayride:wasip2/exports@0.0.47;
+ 
+    include hayride:http/server@0.0.47;
+}

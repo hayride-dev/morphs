@@ -262,40 +262,48 @@ func customToolEncode(tools []*types.ToolSchema) string {
 	}
 
 	result := `
-# Tool Instructions
-- Function calls MUST follow the specified format
-- Required parameters MUST be specified
-- Only call one function at a time
-- Put the entire function call reply on one line
+	# Tool Instructions
+	- Function calls MUST follow the specified format
+	- Required parameters MUST be specified
+	- Only call one function at a time
+	- Put the entire function call reply on one line
+	- Only add parameters when the params are specified in the tool schema
 
-You have access to the following functions:
-{
+	You have access to the following functions:
+	{
 	`
 	for _, tool := range tools {
-		result += fmt.Sprintf(`"id": "%s",\n`, tool.ID)
-		result += fmt.Sprintf(`"name": "%s",\n`, tool.Name)
+		result += fmt.Sprintf(`"name": "%s %s",\n`, tool.ID, tool.Name)
 		result += fmt.Sprintf(`"description": "%s",\n`, tool.Description)
 		if tool.ParamsSchema != "" {
 			result += fmt.Sprintf(`"params": %s,\n`, tool.ParamsSchema)
 		}
 	}
+
 	// remove last comma
 	result = strings.TrimSuffix(result, ",\n")
 
 	result += `
-}
-	
-If a you choose to call a function ONLY reply in the following format:
-<{start_tag}={function_id} {function_name}>{parameters}{end_tag}
-where
+	}
+		
+	If a you choose to call a function ONLY reply in the following format:
+	<{start_tag}={function_name}>{parameters}{end_tag}
+	where
 
-start_tag => <function
-parameters => a JSON dict with the function argument name as key and function argument value as value.
-end_tag => </function>
+	start_tag => <function
+	parameters => a JSON dict with the function argument name as key and function argument value as value.
+	end_tag => </function>
 
-Here is an example:
-<function=example:id/package example_function_name>{"example_name": "example_value"}</function>
-`
+	Here is an example,
+	<function=example_function_name>{"example_name": "example_value"}</function>
+
+	Reminder:
+	- Function calls MUST follow the specified format
+	- Required parameters MUST be specified
+	- Only call one function at a time
+	- Put the entire function call reply on one line
+	- Always add your sources when using search results to answer the user query
+	`
 	return result
 }
 

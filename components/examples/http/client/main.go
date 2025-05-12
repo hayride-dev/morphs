@@ -24,7 +24,7 @@ func main() {
 		fmt.Println("unexpected status code:", resp.StatusCode)
 		return
 	}
-	fmt.Println("GET request successful:", resp.Status)
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("error reading response body:", err)

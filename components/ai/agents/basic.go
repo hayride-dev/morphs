@@ -16,8 +16,6 @@ import (
 
 const maxTurns = 10
 
-var modelResource models.Model
-
 type BasicAgent struct {
 	model models.Model
 	ctx   ctx.Context
