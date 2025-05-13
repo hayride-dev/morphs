@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 
-	"github.com/hayride-dev/bindings/go/exports/net/http/handle"
+	"github.com/hayride-dev/bindings/go/exports/net/http/server"
 )
 
 func init() {
@@ -14,8 +14,7 @@ func init() {
 		w.Write([]byte("Hello, World!"))
 	})
 
-	// hayride bindings for export
-	handle.Handler(mux)
+	server.Export(mux, server.Config{Address: "localhost:9000"})
 }
 
 func main() {}
