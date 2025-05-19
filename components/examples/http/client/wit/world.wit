@@ -1,8 +1,8 @@
 package hayride-examples:http@0.0.1;
 
 world client {
-    include hayride:wasip2/imports@0.0.48;
-    include hayride:wasip2/exports@0.0.48;
+    include hayride:wasip2/imports@0.0.49;
+    include hayride:wasip2/exports@0.0.49;
  
-    include hayride:http/client@0.0.48;
+    include hayride:http/client@0.0.49;
 }

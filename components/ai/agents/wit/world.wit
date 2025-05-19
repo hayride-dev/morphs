@@ -1,12 +1,12 @@
 package hayride:agents@0.0.1;
 
 world agent {
-    include hayride:wasip2/imports@0.0.48;
-    import hayride:ai/context@0.0.48;
-    import hayride:ai/model@0.0.48;
-    import hayride:ai/graph-stream@0.0.48;
+    include hayride:wasip2/imports@0.0.49;
+    import hayride:ai/context@0.0.49;
+    import hayride:ai/model@0.0.49;
+    import hayride:ai/graph-stream@0.0.49;
 
     import hayride:datetime/datetime@0.0.1;
 
-    export hayride:ai/agent@0.0.48;
+    export hayride:ai/agent@0.0.49;
 }
