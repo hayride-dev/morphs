@@ -4,7 +4,7 @@ default: all
 
 all: build
 
-build: ; cargo build --target wasm32-wasip2
+build: ; cargo build --target wasm32-wasip2 --release
 
 gen-go: ; wit-bindgen-go generate --world hayride:datetime/imports --out ./pkg/internal/gen ./wit
 
