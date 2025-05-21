@@ -38,7 +38,7 @@ func init() {
 	If you can't answer the user's question with certainty, use the tools you have to try to answer the user's question.`
 
 	context := ctx.NewContext()
-	context.Push(types.Message{
+	if err := context.Push(types.Message{
 		Role: types.RoleSystem,
 		Content: cm.ToList([]types.Content{
 			types.ContentText(types.TextContent{
@@ -50,7 +50,9 @@ func init() {
 				Description:  "A tool to get the current date and time. There are no parameters.",
 				ParamsSchema: ""}),
 		}),
-	})
+	}); err != nil {
+		panic(fmt.Errorf("failed to push system message: %w", err))
+	}
 
 	defaultAgent = DefaultAgent{
 		model: model,
@@ -97,7 +99,7 @@ func invoke(messages []types.Message) ([]types.Message, error) {
 						if c.Name == "date" {
 							value := datetime.Date()
 
-							defaultAgent.ctx.Push(types.Message{
+							if err := defaultAgent.ctx.Push(types.Message{
 								Role: types.RoleTool,
 								Content: cm.ToList([]types.Content{
 									types.ContentToolOutput(types.ToolOutput{
@@ -107,7 +109,9 @@ func invoke(messages []types.Message) ([]types.Message, error) {
 										Output:      value,
 									}),
 								}),
-							})
+							}); err != nil {
+								return nil, fmt.Errorf("failed to push tool output: %w", err)
+							}
 						}
 					default:
 						return nil, fmt.Errorf("unknown tool use: %s", c.ID)
@@ -165,7 +169,7 @@ func invokeStream(message []types.Message, w io.Writer) error {
 						if c.Name == "date" {
 							value := datetime.Date()
 
-							defaultAgent.ctx.Push(types.Message{
+							if err := defaultAgent.ctx.Push(types.Message{
 								Role: types.RoleTool,
 								Content: cm.ToList([]types.Content{
 									types.ContentToolOutput(types.ToolOutput{
@@ -175,7 +179,9 @@ func invokeStream(message []types.Message, w io.Writer) error {
 										Output:      value,
 									}),
 								}),
-							})
+							}); err != nil {
+								return fmt.Errorf("failed to push tool output: %w", err)
+							}
 						}
 					default:
 						return fmt.Errorf("unknown tool use: %s", c.ID)
