@@ -11,5 +11,5 @@ build:
 	done
 
 compose: 
-	wac plug ./components/ai/agents/basic.wasm --plug ./components/ai/tools/datetime/target/wasm32-wasip2/debug/datetime.wasm --plug ./components/ai/contexts/inmemory.wasm --plug ./components/ai/models/llama-3.1.wasm -o composed-agent.wasm 
+	wac plug ./components/ai/agents/default.wasm --plug ./components/ai/tools/datetime/target/wasm32-wasip2/debug/datetime.wasm --plug ./components/ai/contexts/inmemory.wasm --plug ./components/ai/models/llama-3.1.wasm -o composed-agent.wasm 
 	wac plug ./components/ai/runners/cli.wasm --plug composed-agent.wasm -o cli-agent.wasm

@@ -1,4 +1,4 @@
-//go:build basic
+//go:build default
 
 package main
 
@@ -18,12 +18,12 @@ const maxTurns = 10
 
 var modelResource models.Model
 
-type BasicAgent struct {
+type DefaultAgent struct {
 	model models.Model
 	ctx   ctx.Context
 }
 
-var basicAgent BasicAgent
+var defaultAgent DefaultAgent
 
 func init() {
 	// Create model
@@ -38,7 +38,7 @@ func init() {
 	If you can't answer the user's question with certainty, use the tools you have to try to answer the user's question.`
 
 	context := ctx.NewContext()
-	context.Push(types.Message{
+	if err := context.Push(types.Message{
 		Role: types.RoleSystem,
 		Content: cm.ToList([]types.Content{
 			types.ContentText(types.TextContent{
@@ -50,36 +50,104 @@ func init() {
 				Description:  "A tool to get the current date and time. There are no parameters.",
 				ParamsSchema: ""}),
 		}),
-	})
+	}); err != nil {
+		panic(fmt.Errorf("failed to push system message: %w", err))
+	}
 
-	basicAgent = BasicAgent{
+	defaultAgent = DefaultAgent{
 		model: model,
 		ctx:   context,
 	}
 
-	agents.Export(agents.WithName("basic"), agents.WithInvokeStreamFunc(invoke))
+	agents.Export(agents.WithName("default"), agents.WithInvokeFunc(invoke), agents.WithInvokeStreamFunc(invokeStream))
 }
 
-func invoke(message []types.Message, w io.Writer) error {
+// invoke is the default agent invocation function.
+func invoke(messages []types.Message) ([]types.Message, error) {
 
-	if err := basicAgent.ctx.Push(message...); err != nil {
+	if err := defaultAgent.ctx.Push(messages...); err != nil {
+		return nil, fmt.Errorf("failed to push message: %w", err)
+	}
+
+	result := make([]types.Message, 0)
+	// agent loop
+	turns := 0
+	for turns < maxTurns {
+		msgs, err := defaultAgent.ctx.Messages()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get messages: %w", err)
+		}
+
+		msg, err := defaultAgent.model.Compute(msgs)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := defaultAgent.ctx.Push(*msg); err != nil {
+			return nil, fmt.Errorf("failed to push response message: %w", err)
+		}
+
+		result = append(result, *msg)
+
+		switch msg.Role {
+		case types.RoleAssistant:
+			for _, content := range msg.Content.Slice() {
+				if content.String() == "tool-input" {
+					c := content.ToolInput()
+					switch c.ID {
+					case "hayride:datetime@0.0.1":
+						if c.Name == "date" {
+							value := datetime.Date()
+
+							if err := defaultAgent.ctx.Push(types.Message{
+								Role: types.RoleTool,
+								Content: cm.ToList([]types.Content{
+									types.ContentToolOutput(types.ToolOutput{
+										ID:          "hayride:datetime@0.0.1",
+										Name:        "date",
+										ContentType: "tool-output",
+										Output:      value,
+									}),
+								}),
+							}); err != nil {
+								return nil, fmt.Errorf("failed to push tool output: %w", err)
+							}
+						}
+					default:
+						return nil, fmt.Errorf("unknown tool use: %s", c.ID)
+					}
+				} else {
+					// no tool input, end the loop
+					return result, nil
+				}
+			}
+		}
+		turns++
+	}
+	return nil, fmt.Errorf("max turns reached: %d", maxTurns)
+}
+
+// invokeStream is a streaming version of the agent invocation function
+func invokeStream(message []types.Message, w io.Writer) error {
+
+	if err := defaultAgent.ctx.Push(message...); err != nil {
 		return fmt.Errorf("failed to push message: %w", err)
 	}
 
 	// agent loop
 	turns := 0
 	for turns < maxTurns {
-		msgs, err := basicAgent.ctx.Messages()
+		msgs, err := defaultAgent.ctx.Messages()
 		if err != nil {
 			return fmt.Errorf("failed to get messages: %w", err)
 		}
 
-		msg, err := basicAgent.model.Compute(msgs)
+		msg, err := defaultAgent.model.Compute(msgs)
 		if err != nil {
 			return err
 		}
 
-		if err := basicAgent.ctx.Push(*msg); err != nil {
+		if err := defaultAgent.ctx.Push(*msg); err != nil {
 			return fmt.Errorf("failed to push response message: %w", err)
 		}
 
@@ -101,7 +169,7 @@ func invoke(message []types.Message, w io.Writer) error {
 						if c.Name == "date" {
 							value := datetime.Date()
 
-							basicAgent.ctx.Push(types.Message{
+							if err := defaultAgent.ctx.Push(types.Message{
 								Role: types.RoleTool,
 								Content: cm.ToList([]types.Content{
 									types.ContentToolOutput(types.ToolOutput{
@@ -111,7 +179,9 @@ func invoke(message []types.Message, w io.Writer) error {
 										Output:      value,
 									}),
 								}),
-							})
+							}); err != nil {
+								return fmt.Errorf("failed to push tool output: %w", err)
+							}
 						}
 					default:
 						return fmt.Errorf("unknown tool use: %s", c.ID)

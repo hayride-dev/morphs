@@ -6,7 +6,7 @@ let llama = new hayride:llama31@0.0.1 {...};
 
 let datetime = new hayride:datetime@0.0.1 {...};
 
-let agent = new hayride:basic@0.0.1 {
+let agent = new hayride:default@0.0.1 {
   context: context.context,
   model: llama.model,
   datetime: datetime.datetime,
