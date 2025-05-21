@@ -127,7 +127,7 @@ func invoke(messages []types.Message) ([]types.Message, error) {
 	return nil, fmt.Errorf("max turns reached: %d", maxTurns)
 }
 
-// invokeStream is a streaming version of the agent invocation function.s
+// invokeStream is a streaming version of the agent invocation function
 func invokeStream(message []types.Message, w io.Writer) error {
 
 	if err := defaultAgent.ctx.Push(message...); err != nil {
