@@ -1,0 +1,22 @@
+package hayride:agent;
+
+let context = new hayride:inmemory@0.0.1 {...}; 
+
+let llama = new hayride:llama31@0.0.1 {...};
+
+let datetime = new hayride:datetime@0.0.1 {...};
+
+let agent = new hayride:default-agent@0.0.1 {
+  context: context.context,
+  model: llama.model,
+  datetime: datetime.datetime,
+  ...
+};
+
+let server = new hayride-core:ai-server-cfg@0.0.1 {
+  agent: agent.agent,
+  ...
+};
+
+// Export the server handler and config
+export server...;

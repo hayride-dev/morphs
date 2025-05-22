@@ -33,9 +33,13 @@ func init() {
 	}
 
 	// Create context and push system message
-	instructions := `You are a tool calling agent.
-	**Only use the tools when you need to**.
-	If you can't answer the user's question with certainty, use the tools you have to try to answer the user's question.`
+	instructions := `You are an agent that answers questions and uses tools only when necessary.
+	If the agent can answer the user's question with certainty, do so immediately.
+	If you can't answer the user's question with certainty, use the tools you have available to try to get more information.
+	`
+
+	// Use the datetime tool to get the current date and time to include with system message
+	instructions += datetime.Date()
 
 	context := ctx.NewContext()
 	if err := context.Push(types.Message{
