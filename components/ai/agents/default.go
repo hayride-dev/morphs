@@ -1,204 +1,309 @@
-//go:build default
-
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"unsafe"
 
-	"github.com/hayride-dev/bindings/go/exports/ai/agents"
-	"github.com/hayride-dev/bindings/go/gen/types/hayride/ai/types"
-	"github.com/hayride-dev/bindings/go/imports/ai/ctx"
-	"github.com/hayride-dev/bindings/go/imports/ai/models"
-	"github.com/hayride-dev/morphs/components/ai/tools/datetime/pkg/datetime"
+	"github.com/hayride-dev/morphs/components/ai/agents/internal/gen/hayride/ai/agents"
+	inferencestream "github.com/hayride-dev/morphs/components/ai/agents/internal/gen/hayride/ai/inference-stream"
+	"github.com/hayride-dev/morphs/components/ai/agents/internal/gen/hayride/ai/types"
+	"github.com/hayride-dev/morphs/components/ai/agents/internal/gen/wasi/nn/tensor"
 	"go.bytecodealliance.org/cm"
 )
 
-const maxTurns = 10
-
-var modelResource models.Model
-
-type DefaultAgent struct {
-	model models.Model
-	ctx   ctx.Context
-}
-
-var defaultAgent DefaultAgent
+const maxturn = 10
 
 func init() {
-	// Create model
-	model, err := models.New(models.WithName("Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf"))
-	if err != nil {
-		panic(err)
-	}
-
-	// Create context and push system message
-	instructions := `You are an agent that answers questions and uses tools only when necessary.
-	If the agent can answer the user's question with certainty, do so immediately.
-	If you can't answer the user's question with certainty, use the tools you have available to try to get more information.
-	`
-
-	// Use the datetime tool to get the current date and time to include with system message
-	instructions += datetime.Date()
-
-	context := ctx.NewContext()
-	if err := context.Push(types.Message{
-		Role: types.RoleSystem,
-		Content: cm.ToList([]types.Content{
-			types.ContentText(types.TextContent{
-				Text: instructions,
-			}),
-			types.ContentToolSchema(types.ToolSchema{
-				ID:           "hayride:datetime@0.0.1",
-				Name:         "date",
-				Description:  "A tool to get the current date and time. There are no parameters.",
-				ParamsSchema: ""}),
-		}),
-	}); err != nil {
-		panic(fmt.Errorf("failed to push system message: %w", err))
-	}
-
-	defaultAgent = DefaultAgent{
-		model: model,
-		ctx:   context,
-	}
-
-	agents.Export(agents.WithName("default"), agents.WithInvokeFunc(invoke), agents.WithInvokeStreamFunc(invokeStream))
+	agents.Exports.Agent.Constructor = constructor
 }
 
-// invoke is the default agent invocation function.
-func invoke(messages []types.Message) ([]types.Message, error) {
+type tensorStream cm.Resource
 
-	if err := defaultAgent.ctx.Push(messages...); err != nil {
-		return nil, fmt.Errorf("failed to push message: %w", err)
+// Read will read the next `len` bytes from the stream
+// will return empty byte slice if the stream is closed.
+// blocks until the data is available
+func (t tensorStream) Read(p []byte) (int, error) {
+	ts := cm.Reinterpret[inferencestream.TensorStream](t)
+	ts.Subscribe().Block()
+	data := ts.Read(uint64(len(p)))
+	if data.IsErr() {
+		if data.Err().Closed() {
+			return 0, nil
+		}
+
+		return 0, fmt.Errorf("%s", data.Err().String())
+	}
+	n := copy(p, data.OK().Slice())
+	p = p[:n]
+	return len(p), nil
+}
+
+type agent struct {
+	name    string
+	tools   agents.Tools
+	context agents.Context
+	format  agents.Format
+	graph   agents.GraphExecutionContextStream
+}
+
+func constructor(name string, instruction string, tools_ agents.Tools, context_ agents.Context, format agents.Format, graph agents.GraphExecutionContextStream) agents.Agent {
+	agent := &agent{
+		name:    name,
+		tools:   tools_,
+		context: context_,
+		format:  format,
+		graph:   graph,
 	}
 
-	result := make([]types.Message, 0)
-	// agent loop
-	turns := 0
-	for turns < maxTurns {
-		msgs, err := defaultAgent.ctx.Messages()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get messages: %w", err)
+	agents.Exports.Agent.Invoke = agent.invoke
+	agents.Exports.Agent.InvokeStream = agent.invokeStream
+
+	content := []types.Content{}
+	content = append(content, types.ContentText(types.TextContent{
+		Text: instruction,
+	}))
+
+	result := tools_.Capabilities()
+	if result.IsErr() {
+		return cm.ResourceNone
+	}
+	for _, t := range result.OK().Slice() {
+		content = append(content, types.ContentToolSchema(t))
+	}
+
+	agent.context.Push(agents.Message{Role: types.RoleSystem, Content: cm.ToList(content)})
+
+	return agents.AgentResourceNew(cm.Rep(uintptr(unsafe.Pointer(agent))))
+}
+
+func (a *agent) invoke(self cm.Rep, input agents.Message) cm.Result[agents.MessageShape, agents.Message, agents.Error] {
+	result := a.context.Push(input)
+	if result.IsErr() {
+		err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+		return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
+	}
+
+	finalMsg := &types.Message{Role: types.RoleAssistant, Content: cm.ToList([]types.Content{types.ContentText(types.TextContent{
+		Text: "agent yielded no response",
+	})})}
+
+	for i := 0; i <= maxturn; i++ {
+		result := a.context.Messages()
+		if result.IsErr() {
+			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+			return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
+		}
+		msgs := result.OK().Slice()
+
+		encodedResult := a.format.Encode(cm.ToList(msgs))
+		if encodedResult.IsErr() {
+			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+			return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
 		}
 
-		msg, err := defaultAgent.model.Compute(msgs)
-		if err != nil {
-			return nil, err
+		d := tensor.TensorDimensions(cm.ToList([]uint32{1}))
+		td := tensor.TensorData(cm.ToList(encodedResult.OK().Slice()))
+		t := tensor.NewTensor(d, tensor.TensorTypeU8, td)
+		inputs := []inferencestream.NamedTensor{
+			{
+				F0: "user",
+				F1: t,
+			},
+		}
+		computeResult := a.graph.Compute(cm.ToList(inputs))
+		if computeResult.IsErr() {
+			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+			return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
 		}
 
-		if err := defaultAgent.ctx.Push(*msg); err != nil {
-			return nil, fmt.Errorf("failed to push response message: %w", err)
+		stream := computeResult.OK().F1
+		ts := tensorStream(stream)
+		// read the output from the stream
+		text := make([]byte, 0)
+		for {
+			// Read up to 100 bytes from the output
+			// to get any tokens that have been generated and push to socket
+			p := make([]byte, 100)
+			len, err := ts.Read(p)
+			if len == 0 || err == io.EOF {
+				break
+			} else if err != nil {
+				err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+				return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
+			}
+			text = append(text, p[:len]...)
 		}
 
-		result = append(result, *msg)
+		decodeResult := a.format.Decode(cm.ToList(text))
+		if decodeResult.IsErr() {
+			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+			return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
+		}
 
+		msg := decodeResult.OK()
+		pushResponse := a.context.Push(*msg)
+		if pushResponse.IsErr() {
+			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+			return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
+		}
+		calledTool := false
 		switch msg.Role {
 		case types.RoleAssistant:
-			for _, content := range msg.Content.Slice() {
-				if content.String() == "tool-input" {
-					c := content.ToolInput()
-					switch c.ID {
-					case "hayride:datetime@0.0.1":
-						if c.Name == "date" {
-							value := datetime.Date()
-
-							if err := defaultAgent.ctx.Push(types.Message{
-								Role: types.RoleTool,
-								Content: cm.ToList([]types.Content{
-									types.ContentToolOutput(types.ToolOutput{
-										ID:          "hayride:datetime@0.0.1",
-										Name:        "date",
-										ContentType: "tool-output",
-										Output:      value,
-									}),
-								}),
-							}); err != nil {
-								return nil, fmt.Errorf("failed to push tool output: %w", err)
-							}
-						}
-					default:
-						return nil, fmt.Errorf("unknown tool use: %s", c.ID)
+			for _, c := range msg.Content.Slice() {
+				switch c.String() {
+				case "tool-input":
+					toolresult := a.tools.Call(*c.ToolInput())
+					if toolresult.IsErr() {
+						err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+						return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
 					}
-				} else {
-					// no tool input, end the loop
-					return result, nil
+					calledTool = true
+					// Push the tool output to the context and re-compute with the tool output
+					a.context.Push(agents.Message{Role: types.RoleTool, Content: cm.ToList([]types.Content{types.ContentToolOutput(*toolresult.OK())})})
+				default:
+					// If the content is not a tool input, we can just continue
+					continue
 				}
 			}
+		default:
+			// the role should always be an assistant
+			return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError)))
 		}
-		turns++
+		if !calledTool {
+			// overwrite the final message with the last message
+			finalMsg = msg
+			// assuming if the agent is not requesting a tool call, it is the final message
+			break
+		}
 	}
-	return nil, fmt.Errorf("max turns reached: %d", maxTurns)
+	return cm.OK[cm.Result[agents.MessageShape, agents.Message, agents.Error]](*finalMsg)
 }
 
-// invokeStream is a streaming version of the agent invocation function
-func invokeStream(message []types.Message, w io.Writer) error {
-
-	if err := defaultAgent.ctx.Push(message...); err != nil {
-		return fmt.Errorf("failed to push message: %w", err)
+func (a *agent) invokeStream(self cm.Rep, message agents.Message, writer agents.OutputStream) cm.Result[agents.Error, struct{}, agents.Error] {
+	result := a.context.Push(message)
+	if result.IsErr() {
+		err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+		return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
 	}
 
-	// agent loop
-	turns := 0
-	for turns < maxTurns {
-		msgs, err := defaultAgent.ctx.Messages()
-		if err != nil {
-			return fmt.Errorf("failed to get messages: %w", err)
+	finalMsg := &types.Message{Role: types.RoleAssistant, Content: cm.ToList([]types.Content{types.ContentText(types.TextContent{
+		Text: "agent yielded no response",
+	})})}
+
+	for i := 0; i <= maxturn; i++ {
+		result := a.context.Messages()
+		if result.IsErr() {
+			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+			return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
+		}
+		msgs := result.OK().Slice()
+
+		encodedResult := a.format.Encode(cm.ToList(msgs))
+		if encodedResult.IsErr() {
+			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+			return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
 		}
 
-		msg, err := defaultAgent.model.Compute(msgs)
-		if err != nil {
-			return err
+		d := tensor.TensorDimensions(cm.ToList([]uint32{1}))
+		td := tensor.TensorData(cm.ToList(encodedResult.OK().Slice()))
+		t := tensor.NewTensor(d, tensor.TensorTypeU8, td)
+		inputs := []inferencestream.NamedTensor{
+			{
+				F0: "user",
+				F1: t,
+			},
+		}
+		computeResult := a.graph.Compute(cm.ToList(inputs))
+		if computeResult.IsErr() {
+			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+			return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
 		}
 
-		if err := defaultAgent.ctx.Push(*msg); err != nil {
-			return fmt.Errorf("failed to push response message: %w", err)
+		stream := computeResult.OK().F1
+		ts := tensorStream(stream)
+		// read the output from the stream
+		text := make([]byte, 0)
+		for {
+			// Read up to 100 bytes from the output
+			// to get any tokens that have been generated and push to socket
+			p := make([]byte, 100)
+			len, err := ts.Read(p)
+			if len == 0 || err == io.EOF {
+				break
+			} else if err != nil {
+				err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+				return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
+			}
+			text = append(text, p[:len]...)
+
+			// TODO:: Optionally write RAW output to the writer
+			// this would result in data getting back to the client faster
+			// additionally once the full message is read in, we will decode it
+			// and write the full typed message.
+			// For this to work cleanly, we need a new message content type, potentially role type as well.
 		}
 
-		b, err := msg.MarshalJSON()
-		if err != nil {
-			return err
+		decodeResult := a.format.Decode(cm.ToList(text))
+		if decodeResult.IsErr() {
+			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+			return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
 		}
 
-		if _, err := w.Write(b); err != nil {
-			return fmt.Errorf("failed to write message: %w", err)
+		msg := decodeResult.OK()
+		pushResponse := a.context.Push(*msg)
+		if pushResponse.IsErr() {
+			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+			return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
 		}
+		calledTool := false
 		switch msg.Role {
 		case types.RoleAssistant:
-			for _, content := range msg.Content.Slice() {
-				if content.String() == "tool-input" {
-					c := content.ToolInput()
-					switch c.ID {
-					case "hayride:datetime@0.0.1":
-						if c.Name == "date" {
-							value := datetime.Date()
-
-							if err := defaultAgent.ctx.Push(types.Message{
-								Role: types.RoleTool,
-								Content: cm.ToList([]types.Content{
-									types.ContentToolOutput(types.ToolOutput{
-										ID:          "hayride:datetime@0.0.1",
-										Name:        "date",
-										ContentType: "tool-output",
-										Output:      value,
-									}),
-								}),
-							}); err != nil {
-								return fmt.Errorf("failed to push tool output: %w", err)
-							}
-						}
-					default:
-						return fmt.Errorf("unknown tool use: %s", c.ID)
+			for _, c := range msg.Content.Slice() {
+				switch c.String() {
+				case "tool-input":
+					toolresult := a.tools.Call(*c.ToolInput())
+					if toolresult.IsErr() {
+						err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+						return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
 					}
-				} else {
-					// no tool input, end the loop
-					return nil
+					calledTool = true
+					// Push the tool output to the context and re-compute with the tool output
+					a.context.Push(agents.Message{Role: types.RoleTool, Content: cm.ToList([]types.Content{types.ContentToolOutput(*toolresult.OK())})})
+				default:
+					// If the content is not a tool input, we can just continue
+					continue
 				}
 			}
+		default:
+			// the role should always be an assistant
+			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+			return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
 		}
-		turns++
+		if !calledTool {
+			// overwrite the final message with the last message
+			finalMsg = msg
+			// Write full message to the output stream
+			bytes, err := json.Marshal(finalMsg)
+			if err != nil {
+				err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+				return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
+			}
+			result := writer.Write(cm.ToList(bytes))
+			if result.IsErr() {
+				err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+				return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
+			}
+			// assuming if the agent is not requesting a tool call, it is the final message
+			break
+		}
 	}
-	return fmt.Errorf("max turns reached: %d", maxTurns)
+
+	return cm.OK[cm.Result[agents.Error, struct{}, agents.Error]](struct{}{})
 }
 
-func main() {}
+func main() {
+	// This is just a placeholder to ensure the package can compile.
+	// The actual functionality is provided by the constructor and invoke methods.
+}
