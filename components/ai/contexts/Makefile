@@ -4,10 +4,7 @@ default: all
 
 all: build
 
-TAGS ?= in_memory
+gen:
+	wit-bindgen-go generate --world hayride:contexts/in-memory --out ./internal/gen ./wit
 
-CTX ?= inmemory.go
-
-test: ; tinygo test --tags $(TAGS) -target wasip2 --wit-package ./wit/ --wit-world ctx ./.
-
-build: ; tinygo build --tags $(TAGS) -target wasip2 --wit-package ./wit/ --wit-world ctx $(CTX)
+build: ; tinygo build -target wasip2 --wit-package ./wit/ --wit-world in-memory inmemory.go

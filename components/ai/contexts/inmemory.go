@@ -3,41 +3,42 @@
 package main
 
 import (
-	"fmt"
+	"unsafe"
 
-	"github.com/hayride-dev/bindings/go/exports/ai/ctx"
-	"github.com/hayride-dev/bindings/go/gen/types/hayride/ai/types"
+	"github.com/hayride-dev/morphs/components/ai/contexts/internal/gen/hayride/ai/context"
+	"github.com/hayride-dev/morphs/components/ai/contexts/internal/gen/hayride/ai/types"
+	"go.bytecodealliance.org/cm"
 )
 
-var _ ctx.Context = (*inMemoryContext)(nil)
+func init() {
+
+}
 
 type inMemoryContext struct {
 	context []types.Message
 }
 
 func init() {
-	c := &inMemoryContext{
+	context.Exports.Context.Constructor = constructor
+}
+
+func constructor() context.Context {
+	ctx := &inMemoryContext{
 		context: make([]types.Message, 0),
 	}
-	ctx.Export(c)
+
+	context.Exports.Context.Push = ctx.push
+	context.Exports.Context.Messages = ctx.messages
+	return context.ContextResourceNew((cm.Rep(uintptr(unsafe.Pointer(ctx)))))
 }
 
-func (c *inMemoryContext) Push(messages ...types.Message) error {
-	for _, m := range messages {
-		c.context = append(c.context, m)
-	}
-	return nil
+func (c *inMemoryContext) push(self cm.Rep, msg context.Message) cm.Result[context.Error, struct{}, context.Error] {
+	c.context = append(c.context, msg)
+	return cm.Result[context.Error, struct{}, context.Error]{}
 }
 
-func (c *inMemoryContext) Messages() ([]types.Message, error) {
-	return c.context, nil
-}
-
-func (c *inMemoryContext) Next() (types.Message, error) {
-	if len(c.context) == 0 {
-		return types.Message{}, fmt.Errorf("missing messages")
-	}
-	return c.context[len(c.context)-1], nil
+func (c *inMemoryContext) messages(self cm.Rep) (result cm.Result[cm.List[context.Message], cm.List[context.Message], context.Error]) {
+	return cm.OK[cm.Result[cm.List[context.Message], cm.List[context.Message], context.Error]](cm.ToList(c.context))
 }
 
 func main() {}

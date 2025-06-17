@@ -4,9 +4,3 @@ world default {
     include hayride:wasip2/imports@0.0.53;
     export hayride:ai/agents@0.0.53;
 }
-
-world mcp {
-    include hayride:wasip2/imports@0.0.53;
-    export hayride:ai/agents@0.0.53;
-    import hayride:ai/mcp-server@0.0.53;
-}
