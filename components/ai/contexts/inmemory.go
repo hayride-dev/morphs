@@ -11,7 +11,7 @@ import (
 )
 
 type resources struct {
-	ctx map[context.Context]*inMemoryContext
+	ctx map[cm.Rep]*inMemoryContext
 }
 
 type inMemoryContext struct {
@@ -28,7 +28,7 @@ func (c *inMemoryContext) messages() []context.Message {
 }
 
 var resourceTable = resources{
-	ctx: make(map[context.Context]*inMemoryContext),
+	ctx: make(map[cm.Rep]*inMemoryContext),
 }
 
 func init() {
@@ -44,14 +44,14 @@ func constructor() context.Context {
 
 	context.Exports.Context.Push = push
 	context.Exports.Context.Messages = messages
-
-	v := context.ContextResourceNew((cm.Rep(uintptr(unsafe.Pointer(ctx)))))
-	resourceTable.ctx[v] = ctx
+	key := cm.Rep(uintptr(unsafe.Pointer(ctx)))
+	v := context.ContextResourceNew(key)
+	resourceTable.ctx[key] = ctx
 	return v
 }
 
 func push(self cm.Rep, msg context.Message) cm.Result[context.Error, struct{}, context.Error] {
-	ctx, ok := resourceTable.ctx[context.Context(self)]
+	ctx, ok := resourceTable.ctx[self]
 	if !ok {
 		wasiErr := context.ErrorResourceNew(cm.Rep(context.ErrorCodePushError))
 		return cm.Err[cm.Result[context.Error, struct{}, context.Error]](wasiErr)
@@ -65,7 +65,7 @@ func push(self cm.Rep, msg context.Message) cm.Result[context.Error, struct{}, c
 }
 
 func messages(self cm.Rep) (result cm.Result[cm.List[context.Message], cm.List[context.Message], context.Error]) {
-	ctx, ok := resourceTable.ctx[context.Context(self)]
+	ctx, ok := resourceTable.ctx[self]
 	if !ok {
 		wasiErr := context.ErrorResourceNew(cm.Rep(context.ErrorCodeMessageNotFound))
 		return cm.Err[cm.Result[cm.List[context.Message], cm.List[context.Message], context.Error]](wasiErr)
