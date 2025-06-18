@@ -10,16 +10,31 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-func init() {
-
+type resources struct {
+	ctx map[context.Context]*inMemoryContext
 }
 
 type inMemoryContext struct {
 	context []types.Message
 }
 
+func (c *inMemoryContext) push(msg context.Message) error {
+	c.context = append(c.context, msg)
+	return nil
+}
+
+func (c *inMemoryContext) messages() []context.Message {
+	return c.context
+}
+
+var resourceTable = resources{
+	ctx: make(map[context.Context]*inMemoryContext),
+}
+
 func init() {
 	context.Exports.Context.Constructor = constructor
+	context.Exports.Context.Push = push
+	context.Exports.Context.Messages = messages
 }
 
 func constructor() context.Context {
@@ -27,18 +42,36 @@ func constructor() context.Context {
 		context: make([]types.Message, 0),
 	}
 
-	context.Exports.Context.Push = ctx.push
-	context.Exports.Context.Messages = ctx.messages
-	return context.ContextResourceNew((cm.Rep(uintptr(unsafe.Pointer(ctx)))))
+	context.Exports.Context.Push = push
+	context.Exports.Context.Messages = messages
+
+	v := context.ContextResourceNew((cm.Rep(uintptr(unsafe.Pointer(ctx)))))
+	resourceTable.ctx[v] = ctx
+	return v
 }
 
-func (c *inMemoryContext) push(self cm.Rep, msg context.Message) cm.Result[context.Error, struct{}, context.Error] {
-	c.context = append(c.context, msg)
+func push(self cm.Rep, msg context.Message) cm.Result[context.Error, struct{}, context.Error] {
+	ctx, ok := resourceTable.ctx[context.Context(self)]
+	if !ok {
+		wasiErr := context.ErrorResourceNew(cm.Rep(context.ErrorCodePushError))
+		return cm.Err[cm.Result[context.Error, struct{}, context.Error]](wasiErr)
+	}
+
+	if err := ctx.push(msg); err != nil {
+		wasiErr := context.ErrorResourceNew(cm.Rep(context.ErrorCodePushError))
+		return cm.Err[cm.Result[context.Error, struct{}, context.Error]](wasiErr)
+	}
 	return cm.Result[context.Error, struct{}, context.Error]{}
 }
 
-func (c *inMemoryContext) messages(self cm.Rep) (result cm.Result[cm.List[context.Message], cm.List[context.Message], context.Error]) {
-	return cm.OK[cm.Result[cm.List[context.Message], cm.List[context.Message], context.Error]](cm.ToList(c.context))
+func messages(self cm.Rep) (result cm.Result[cm.List[context.Message], cm.List[context.Message], context.Error]) {
+	ctx, ok := resourceTable.ctx[context.Context(self)]
+	if !ok {
+		wasiErr := context.ErrorResourceNew(cm.Rep(context.ErrorCodeMessageNotFound))
+		return cm.Err[cm.Result[cm.List[context.Message], cm.List[context.Message], context.Error]](wasiErr)
+	}
+
+	return cm.OK[cm.Result[cm.List[context.Message], cm.List[context.Message], context.Error]](cm.ToList(ctx.messages()))
 }
 
 func main() {}
