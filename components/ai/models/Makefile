@@ -4,10 +4,7 @@ default: all
 
 all: build
 
-TAGS ?= llama_3_1
+gen:
+	wit-bindgen-go generate --world hayride:models/llm --out ./internal/gen ./wit
 
-MODEL ?= llama-3.1.go
-
-test: ; tinygo test --tags $(TAGS) -target wasip2 --wit-package ./wit/ --wit-world llm ./.
-
-build: ; tinygo build --tags $(TAGS) -target wasip2 --wit-package ./wit/ --wit-world llm $(MODEL)
+build: ; tinygo build -target wasip2 --wit-package ./wit/ --wit-world llm llama-3.1.go

@@ -1,14 +1,14 @@
-//go:build llama_3_1
+//go:build llama3
 
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
 
-	"github.com/hayride-dev/bindings/go/exports/ai/models"
-	"github.com/hayride-dev/bindings/go/gen/types/hayride/ai/types"
+	"github.com/hayride-dev/morphs/components/ai/models/internal/gen/hayride/ai/types"
 	"go.bytecodealliance.org/cm"
 )
 
@@ -75,16 +75,14 @@ const (
 	env = "Environment: ipython"
 )
 
-var _ models.Formatter = &llama_3_1{}
-
-func init() {
-	m := &llama_3_1{}
-	models.Export(m)
+type llama3 struct {
 }
 
-type llama_3_1 struct{}
+func comptimeFormat() Format {
+	return &llama3{}
+}
 
-func (m *llama_3_1) Decode(data []byte) (types.Message, error) {
+func (m *llama3) decode(data []byte) (types.Message, error) {
 	msg := string(data)
 	if strings.Contains(msg, pythonTag) {
 		// remove python tags
@@ -101,18 +99,25 @@ func (m *llama_3_1) Decode(data []byte) (types.Message, error) {
 		argsString := matches[2]
 
 		paramsList := parseFuncParams.FindAllString(argsString, -1)
-		var args []string
+		var args [][2]string
 		for _, param := range paramsList {
 			// Split each parameter into name and value
 			paramParts := strings.SplitN(param, "=", 2)
 			if len(paramParts) != 2 {
 				return types.Message{}, fmt.Errorf("parameter format is invalid: %s", param)
 			}
+
+			// Trim spaces and quotes from key
+			paramKey := strings.TrimSpace(paramParts[0])
+			paramKey = strings.Trim(paramKey, "'")
+			paramKey = strings.Trim(paramKey, "\"")
+
 			// Trim spaces and quotes from value
 			paramValue := strings.TrimSpace(paramParts[1])
 			paramValue = strings.Trim(paramValue, "'")
 			paramValue = strings.Trim(paramValue, "\"")
-			args = append(args, paramValue)
+
+			args = append(args, [2]string{paramKey, paramValue})
 		}
 		return types.Message{
 			Role: types.RoleAssistant,
@@ -120,7 +125,7 @@ func (m *llama_3_1) Decode(data []byte) (types.Message, error) {
 				types.ContentToolInput(types.ToolInput{
 					ID:          pkg,
 					Name:        name,
-					Input:       strings.Join(args, ","),
+					Input:       cm.ToList(args),
 					ContentType: "tool-input",
 				}),
 			}),
@@ -140,13 +145,27 @@ func (m *llama_3_1) Decode(data []byte) (types.Message, error) {
 				}
 			}
 
+			input := [][2]string{}
+			if values, ok := result["input"]; ok {
+				// Unmarshal into a map
+				var m map[string]string
+				err := json.Unmarshal([]byte(values), &m)
+				if err != nil {
+					return types.Message{}, fmt.Errorf("failed to parse input parameters: %v", err)
+				}
+
+				for k, v := range m {
+					input = append(input, [2]string{k, v})
+				}
+			}
+
 			return types.Message{
 				Role: types.RoleAssistant,
 				Content: cm.ToList([]types.Content{
 					types.ContentToolInput(types.ToolInput{
 						ID:          result["pkg"],
 						Name:        result["name"],
-						Input:       result["input"],
+						Input:       cm.ToList(input),
 						ContentType: "tool-input",
 					}),
 				}),
@@ -167,7 +186,7 @@ func (m *llama_3_1) Decode(data []byte) (types.Message, error) {
 	}, nil
 }
 
-func (m *llama_3_1) Encode(messages ...types.Message) ([]byte, error) {
+func (m *llama3) encode(messages ...types.Message) ([]byte, error) {
 	builder := &strings.Builder{}
 	last := len(messages) - 1
 	for i, msg := range messages {
@@ -306,5 +325,3 @@ func customToolEncode(tools []*types.ToolSchema) string {
 	`
 	return result
 }
-
-func main() {}
