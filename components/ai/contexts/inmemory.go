@@ -35,6 +35,7 @@ func init() {
 	context.Exports.Context.Constructor = constructor
 	context.Exports.Context.Push = push
 	context.Exports.Context.Messages = messages
+	context.Exports.Context.Destructor = destructor
 }
 
 func constructor() context.Context {
@@ -42,8 +43,6 @@ func constructor() context.Context {
 		context: make([]types.Message, 0),
 	}
 
-	context.Exports.Context.Push = push
-	context.Exports.Context.Messages = messages
 	key := cm.Rep(uintptr(unsafe.Pointer(ctx)))
 	v := context.ContextResourceNew(key)
 	resourceTable.ctx[key] = ctx
@@ -72,6 +71,10 @@ func messages(self cm.Rep) (result cm.Result[cm.List[context.Message], cm.List[c
 	}
 
 	return cm.OK[cm.Result[cm.List[context.Message], cm.List[context.Message], context.Error]](cm.ToList(ctx.messages()))
+}
+
+func destructor(self cm.Rep) {
+	delete(resourceTable.ctx, self)
 }
 
 func main() {}

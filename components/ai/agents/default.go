@@ -15,8 +15,19 @@ import (
 
 const maxturn = 10
 
+var resourceTable = resources{
+	agents: make(map[cm.Rep]*agent),
+}
+
 func init() {
 	agents.Exports.Agent.Constructor = constructor
+	agents.Exports.Agent.Invoke = invoke
+	agents.Exports.Agent.InvokeStream = invokeStream
+	agents.Exports.Agent.Destructor = destructor
+}
+
+type resources struct {
+	agents map[cm.Rep]*agent
 }
 
 type tensorStream cm.Resource
@@ -32,7 +43,6 @@ func (t tensorStream) Read(p []byte) (int, error) {
 		if data.Err().Closed() {
 			return 0, nil
 		}
-
 		return 0, fmt.Errorf("%s", data.Err().String())
 	}
 	n := copy(p, data.OK().Slice())
@@ -57,9 +67,6 @@ func constructor(name string, instruction string, tools_ agents.Tools, context_ 
 		graph:   graph,
 	}
 
-	agents.Exports.Agent.Invoke = agent.invoke
-	agents.Exports.Agent.InvokeStream = agent.invokeStream
-
 	content := []types.Content{}
 	content = append(content, types.ContentText(types.TextContent{
 		Text: instruction,
@@ -75,11 +82,20 @@ func constructor(name string, instruction string, tools_ agents.Tools, context_ 
 
 	agent.context.Push(agents.Message{Role: types.RoleSystem, Content: cm.ToList(content)})
 
-	return agents.AgentResourceNew(cm.Rep(uintptr(unsafe.Pointer(agent))))
+	key := cm.Rep(uintptr(unsafe.Pointer(agent)))
+	v := agents.AgentResourceNew(key)
+	resourceTable.agents[key] = agent
+	return v
 }
 
-func (a *agent) invoke(self cm.Rep, input agents.Message) cm.Result[agents.MessageShape, agents.Message, agents.Error] {
-	result := a.context.Push(input)
+func invoke(self cm.Rep, input agents.Message) cm.Result[agents.MessageShape, agents.Message, agents.Error] {
+	agent, ok := resourceTable.agents[self]
+	if !ok {
+		wasiErr := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+		return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](wasiErr)
+	}
+
+	result := agent.context.Push(input)
 	if result.IsErr() {
 		err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 		return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
@@ -90,14 +106,14 @@ func (a *agent) invoke(self cm.Rep, input agents.Message) cm.Result[agents.Messa
 	})})}
 
 	for i := 0; i <= maxturn; i++ {
-		result := a.context.Messages()
+		result := agent.context.Messages()
 		if result.IsErr() {
 			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 			return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
 		}
 		msgs := result.OK().Slice()
 
-		encodedResult := a.format.Encode(cm.ToList(msgs))
+		encodedResult := agent.format.Encode(cm.ToList(msgs))
 		if encodedResult.IsErr() {
 			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 			return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
@@ -112,7 +128,7 @@ func (a *agent) invoke(self cm.Rep, input agents.Message) cm.Result[agents.Messa
 				F1: t,
 			},
 		}
-		computeResult := a.graph.Compute(cm.ToList(inputs))
+		computeResult := agent.graph.Compute(cm.ToList(inputs))
 		if computeResult.IsErr() {
 			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 			return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
@@ -136,14 +152,14 @@ func (a *agent) invoke(self cm.Rep, input agents.Message) cm.Result[agents.Messa
 			text = append(text, p[:len]...)
 		}
 
-		decodeResult := a.format.Decode(cm.ToList(text))
+		decodeResult := agent.format.Decode(cm.ToList(text))
 		if decodeResult.IsErr() {
 			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 			return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
 		}
 
 		msg := decodeResult.OK()
-		pushResponse := a.context.Push(*msg)
+		pushResponse := agent.context.Push(*msg)
 		if pushResponse.IsErr() {
 			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 			return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
@@ -154,14 +170,14 @@ func (a *agent) invoke(self cm.Rep, input agents.Message) cm.Result[agents.Messa
 			for _, c := range msg.Content.Slice() {
 				switch c.String() {
 				case "tool-input":
-					toolresult := a.tools.Call(*c.ToolInput())
+					toolresult := agent.tools.Call(*c.ToolInput())
 					if toolresult.IsErr() {
 						err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 						return cm.Err[cm.Result[agents.MessageShape, agents.Message, agents.Error]](err)
 					}
 					calledTool = true
 					// Push the tool output to the context and re-compute with the tool output
-					a.context.Push(agents.Message{Role: types.RoleTool, Content: cm.ToList([]types.Content{types.ContentToolOutput(*toolresult.OK())})})
+					agent.context.Push(agents.Message{Role: types.RoleTool, Content: cm.ToList([]types.Content{types.ContentToolOutput(*toolresult.OK())})})
 				default:
 					// If the content is not a tool input, we can just continue
 					continue
@@ -181,8 +197,14 @@ func (a *agent) invoke(self cm.Rep, input agents.Message) cm.Result[agents.Messa
 	return cm.OK[cm.Result[agents.MessageShape, agents.Message, agents.Error]](*finalMsg)
 }
 
-func (a *agent) invokeStream(self cm.Rep, message agents.Message, writer agents.OutputStream) cm.Result[agents.Error, struct{}, agents.Error] {
-	result := a.context.Push(message)
+func invokeStream(self cm.Rep, message agents.Message, writer agents.OutputStream) cm.Result[agents.Error, struct{}, agents.Error] {
+	agent, ok := resourceTable.agents[self]
+	if !ok {
+		wasiErr := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
+		return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](wasiErr)
+	}
+
+	result := agent.context.Push(message)
 	if result.IsErr() {
 		err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 		return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
@@ -193,14 +215,14 @@ func (a *agent) invokeStream(self cm.Rep, message agents.Message, writer agents.
 	})})}
 
 	for i := 0; i <= maxturn; i++ {
-		result := a.context.Messages()
+		result := agent.context.Messages()
 		if result.IsErr() {
 			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 			return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
 		}
 		msgs := result.OK().Slice()
 
-		encodedResult := a.format.Encode(cm.ToList(msgs))
+		encodedResult := agent.format.Encode(cm.ToList(msgs))
 		if encodedResult.IsErr() {
 			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 			return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
@@ -215,7 +237,7 @@ func (a *agent) invokeStream(self cm.Rep, message agents.Message, writer agents.
 				F1: t,
 			},
 		}
-		computeResult := a.graph.Compute(cm.ToList(inputs))
+		computeResult := agent.graph.Compute(cm.ToList(inputs))
 		if computeResult.IsErr() {
 			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 			return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
@@ -245,14 +267,14 @@ func (a *agent) invokeStream(self cm.Rep, message agents.Message, writer agents.
 			// For this to work cleanly, we need a new message content type, potentially role type as well.
 		}
 
-		decodeResult := a.format.Decode(cm.ToList(text))
+		decodeResult := agent.format.Decode(cm.ToList(text))
 		if decodeResult.IsErr() {
 			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 			return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
 		}
 
 		msg := decodeResult.OK()
-		pushResponse := a.context.Push(*msg)
+		pushResponse := agent.context.Push(*msg)
 		if pushResponse.IsErr() {
 			err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 			return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
@@ -263,14 +285,14 @@ func (a *agent) invokeStream(self cm.Rep, message agents.Message, writer agents.
 			for _, c := range msg.Content.Slice() {
 				switch c.String() {
 				case "tool-input":
-					toolresult := a.tools.Call(*c.ToolInput())
+					toolresult := agent.tools.Call(*c.ToolInput())
 					if toolresult.IsErr() {
 						err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 						return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
 					}
 					calledTool = true
 					// Push the tool output to the context and re-compute with the tool output
-					a.context.Push(agents.Message{Role: types.RoleTool, Content: cm.ToList([]types.Content{types.ContentToolOutput(*toolresult.OK())})})
+					agent.context.Push(agents.Message{Role: types.RoleTool, Content: cm.ToList([]types.Content{types.ContentToolOutput(*toolresult.OK())})})
 				default:
 					// If the content is not a tool input, we can just continue
 					continue
@@ -303,7 +325,8 @@ func (a *agent) invokeStream(self cm.Rep, message agents.Message, writer agents.
 	return cm.OK[cm.Result[agents.Error, struct{}, agents.Error]](struct{}{})
 }
 
-func main() {
-	// This is just a placeholder to ensure the package can compile.
-	// The actual functionality is provided by the constructor and invoke methods.
+func destructor(self cm.Rep) {
+	delete(resourceTable.agents, self)
 }
+
+func main() {}
