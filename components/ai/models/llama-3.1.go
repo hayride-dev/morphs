@@ -82,7 +82,7 @@ func comptimeFormat() Format {
 	return &llama3{}
 }
 
-func (m *llama3) decode(data []byte) (types.Message, error) {
+func (m *llama3) Decode(data []byte) (types.Message, error) {
 	msg := string(data)
 	if strings.Contains(msg, pythonTag) {
 		// remove python tags
@@ -186,7 +186,7 @@ func (m *llama3) decode(data []byte) (types.Message, error) {
 	}, nil
 }
 
-func (m *llama3) encode(messages ...types.Message) ([]byte, error) {
+func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 	builder := &strings.Builder{}
 	last := len(messages) - 1
 	for i, msg := range messages {

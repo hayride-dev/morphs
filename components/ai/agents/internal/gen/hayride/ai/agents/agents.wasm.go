@@ -7,30 +7,30 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "hayride:ai@0.0.53".
+// This file contains wasmimport and wasmexport declarations for "hayride:ai@0.0.55".
 
-//go:wasmimport [export]hayride:ai/agents@0.0.53 [resource-new]error
+//go:wasmimport [export]hayride:ai/agents@0.0.55 [resource-new]error
 //go:noescape
 func wasmimport_ErrorResourceNew(rep0 uint32) (result0 uint32)
 
-//go:wasmimport [export]hayride:ai/agents@0.0.53 [resource-rep]error
+//go:wasmimport [export]hayride:ai/agents@0.0.55 [resource-rep]error
 //go:noescape
 func wasmimport_ErrorResourceRep(self0 uint32) (result0 uint32)
 
-//go:wasmimport [export]hayride:ai/agents@0.0.53 [resource-drop]error
+//go:wasmimport [export]hayride:ai/agents@0.0.55 [resource-drop]error
 //go:noescape
 func wasmimport_ErrorResourceDrop(self0 uint32)
 
-//go:wasmexport hayride:ai/agents@0.0.53#[dtor]error
-//export hayride:ai/agents@0.0.53#[dtor]error
+//go:wasmexport hayride:ai/agents@0.0.55#[dtor]error
+//export hayride:ai/agents@0.0.55#[dtor]error
 func wasmexport_ErrorDestructor(self0 uint32) {
 	self := cm.Reinterpret[cm.Rep]((uint32)(self0))
 	Exports.Error.Destructor(self)
 	return
 }
 
-//go:wasmexport hayride:ai/agents@0.0.53#[method]error.code
-//export hayride:ai/agents@0.0.53#[method]error.code
+//go:wasmexport hayride:ai/agents@0.0.55#[method]error.code
+//export hayride:ai/agents@0.0.55#[method]error.code
 func wasmexport_ErrorCode(self0 uint32) (result0 uint32) {
 	self := cm.Reinterpret[cm.Rep]((uint32)(self0))
 	result := Exports.Error.Code(self)
@@ -38,8 +38,8 @@ func wasmexport_ErrorCode(self0 uint32) (result0 uint32) {
 	return
 }
 
-//go:wasmexport hayride:ai/agents@0.0.53#[method]error.data
-//export hayride:ai/agents@0.0.53#[method]error.data
+//go:wasmexport hayride:ai/agents@0.0.55#[method]error.data
+//export hayride:ai/agents@0.0.55#[method]error.data
 func wasmexport_ErrorData(self0 uint32) (result *string) {
 	self := cm.Reinterpret[cm.Rep]((uint32)(self0))
 	result_ := Exports.Error.Data(self)
@@ -47,28 +47,28 @@ func wasmexport_ErrorData(self0 uint32) (result *string) {
 	return
 }
 
-//go:wasmimport [export]hayride:ai/agents@0.0.53 [resource-new]agent
+//go:wasmimport [export]hayride:ai/agents@0.0.55 [resource-new]agent
 //go:noescape
 func wasmimport_AgentResourceNew(rep0 uint32) (result0 uint32)
 
-//go:wasmimport [export]hayride:ai/agents@0.0.53 [resource-rep]agent
+//go:wasmimport [export]hayride:ai/agents@0.0.55 [resource-rep]agent
 //go:noescape
 func wasmimport_AgentResourceRep(self0 uint32) (result0 uint32)
 
-//go:wasmimport [export]hayride:ai/agents@0.0.53 [resource-drop]agent
+//go:wasmimport [export]hayride:ai/agents@0.0.55 [resource-drop]agent
 //go:noescape
 func wasmimport_AgentResourceDrop(self0 uint32)
 
-//go:wasmexport hayride:ai/agents@0.0.53#[dtor]agent
-//export hayride:ai/agents@0.0.53#[dtor]agent
+//go:wasmexport hayride:ai/agents@0.0.55#[dtor]agent
+//export hayride:ai/agents@0.0.55#[dtor]agent
 func wasmexport_AgentDestructor(self0 uint32) {
 	self := cm.Reinterpret[cm.Rep]((uint32)(self0))
 	Exports.Agent.Destructor(self)
 	return
 }
 
-//go:wasmexport hayride:ai/agents@0.0.53#[constructor]agent
-//export hayride:ai/agents@0.0.53#[constructor]agent
+//go:wasmexport hayride:ai/agents@0.0.55#[constructor]agent
+//export hayride:ai/agents@0.0.55#[constructor]agent
 func wasmexport_Constructor(name0 *uint8, name1 uint32, instruction0 *uint8, instruction1 uint32, tools0 uint32, context0 uint32, format0 uint32, graph0 uint32) (result0 uint32) {
 	name := cm.LiftString[string]((*uint8)(name0), (uint32)(name1))
 	instruction := cm.LiftString[string]((*uint8)(instruction0), (uint32)(instruction1))
@@ -81,8 +81,8 @@ func wasmexport_Constructor(name0 *uint8, name1 uint32, instruction0 *uint8, ins
 	return
 }
 
-//go:wasmexport hayride:ai/agents@0.0.53#[method]agent.invoke
-//export hayride:ai/agents@0.0.53#[method]agent.invoke
+//go:wasmexport hayride:ai/agents@0.0.55#[method]agent.invoke
+//export hayride:ai/agents@0.0.55#[method]agent.invoke
 func wasmexport_AgentInvoke(self0 uint32, input0 uint32, input1 *types.Content, input2 uint32) (result *cm.Result[MessageShape, Message, Error]) {
 	self := cm.Reinterpret[cm.Rep]((uint32)(self0))
 	input := lift_Message((uint32)(input0), (*types.Content)(input1), (uint32)(input2))
@@ -91,8 +91,8 @@ func wasmexport_AgentInvoke(self0 uint32, input0 uint32, input1 *types.Content, 
 	return
 }
 
-//go:wasmexport hayride:ai/agents@0.0.53#[method]agent.invoke-stream
-//export hayride:ai/agents@0.0.53#[method]agent.invoke-stream
+//go:wasmexport hayride:ai/agents@0.0.55#[method]agent.invoke-stream
+//export hayride:ai/agents@0.0.55#[method]agent.invoke-stream
 func wasmexport_AgentInvokeStream(self0 uint32, messages0 uint32, messages1 *types.Content, messages2 uint32, writer0 uint32) (result *cm.Result[Error, struct{}, Error]) {
 	self := cm.Reinterpret[cm.Rep]((uint32)(self0))
 	messages := lift_Message((uint32)(messages0), (*types.Content)(messages1), (uint32)(messages2))

@@ -1,6 +1,6 @@
 package hayride:contexts@0.0.1;
 
 world in-memory {
-    include hayride:wasip2/imports@0.0.53;
-    export hayride:ai/context@0.0.53;
+    include hayride:wasip2/imports@0.0.55;
+    export hayride:ai/context@0.0.55;
 }

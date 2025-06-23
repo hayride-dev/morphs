@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 
-	"github.com/hayride-dev/bindings/go/exports/net/http/server"
+	"github.com/hayride-dev/bindings/go/hayride/net/http/server"
 )
 
 func init() {
