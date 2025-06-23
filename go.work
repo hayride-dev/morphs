@@ -1,0 +1,12 @@
+go 1.23.6
+
+use (
+	./components/ai/agents
+	./components/ai/contexts
+	./components/ai/models
+	./components/ai/runners
+	./components/ai/tools
+	./components/examples/hello-world
+	./components/examples/http/client
+	./components/examples/http/server
+)
