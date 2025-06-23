@@ -1,0 +1,6 @@
+package hayride:tools@0.0.1;
+
+world noop {
+    include hayride:wasip2/imports@0.0.53;
+    export hayride:ai/model@0.0.53;
+}
