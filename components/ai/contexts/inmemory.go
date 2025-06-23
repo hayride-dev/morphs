@@ -3,41 +3,78 @@
 package main
 
 import (
-	"fmt"
+	"unsafe"
 
-	"github.com/hayride-dev/bindings/go/exports/ai/ctx"
-	"github.com/hayride-dev/bindings/go/gen/types/hayride/ai/types"
+	"github.com/hayride-dev/morphs/components/ai/contexts/internal/gen/hayride/ai/context"
+	"github.com/hayride-dev/morphs/components/ai/contexts/internal/gen/hayride/ai/types"
+	"go.bytecodealliance.org/cm"
 )
 
-var _ ctx.Context = (*inMemoryContext)(nil)
+type resources struct {
+	ctx map[cm.Rep]*inMemoryContext
+}
 
 type inMemoryContext struct {
 	context []types.Message
 }
 
-func init() {
-	c := &inMemoryContext{
-		context: make([]types.Message, 0),
-	}
-	ctx.Export(c)
-}
-
-func (c *inMemoryContext) Push(messages ...types.Message) error {
-	for _, m := range messages {
-		c.context = append(c.context, m)
-	}
+func (c *inMemoryContext) push(msg context.Message) error {
+	c.context = append(c.context, msg)
 	return nil
 }
 
-func (c *inMemoryContext) Messages() ([]types.Message, error) {
-	return c.context, nil
+func (c *inMemoryContext) messages() []context.Message {
+	return c.context
 }
 
-func (c *inMemoryContext) Next() (types.Message, error) {
-	if len(c.context) == 0 {
-		return types.Message{}, fmt.Errorf("missing messages")
+var resourceTable = resources{
+	ctx: make(map[cm.Rep]*inMemoryContext),
+}
+
+func init() {
+	context.Exports.Context.Constructor = constructor
+	context.Exports.Context.Push = push
+	context.Exports.Context.Messages = messages
+	context.Exports.Context.Destructor = destructor
+}
+
+func constructor() context.Context {
+	ctx := &inMemoryContext{
+		context: make([]types.Message, 0),
 	}
-	return c.context[len(c.context)-1], nil
+
+	key := cm.Rep(uintptr(unsafe.Pointer(ctx)))
+	v := context.ContextResourceNew(key)
+	resourceTable.ctx[key] = ctx
+	return v
+}
+
+func push(self cm.Rep, msg context.Message) cm.Result[context.Error, struct{}, context.Error] {
+	ctx, ok := resourceTable.ctx[self]
+	if !ok {
+		wasiErr := context.ErrorResourceNew(cm.Rep(context.ErrorCodePushError))
+		return cm.Err[cm.Result[context.Error, struct{}, context.Error]](wasiErr)
+	}
+
+	if err := ctx.push(msg); err != nil {
+		wasiErr := context.ErrorResourceNew(cm.Rep(context.ErrorCodePushError))
+		return cm.Err[cm.Result[context.Error, struct{}, context.Error]](wasiErr)
+	}
+	return cm.Result[context.Error, struct{}, context.Error]{}
+}
+
+func messages(self cm.Rep) (result cm.Result[cm.List[context.Message], cm.List[context.Message], context.Error]) {
+	ctx, ok := resourceTable.ctx[self]
+	if !ok {
+		wasiErr := context.ErrorResourceNew(cm.Rep(context.ErrorCodeMessageNotFound))
+		return cm.Err[cm.Result[cm.List[context.Message], cm.List[context.Message], context.Error]](wasiErr)
+	}
+
+	return cm.OK[cm.Result[cm.List[context.Message], cm.List[context.Message], context.Error]](cm.ToList(ctx.messages()))
+}
+
+func destructor(self cm.Rep) {
+	delete(resourceTable.ctx, self)
 }
 
 func main() {}

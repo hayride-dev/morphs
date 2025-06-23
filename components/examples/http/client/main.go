@@ -6,12 +6,12 @@ import (
 
 	"net/http"
 
-	"github.com/hayride-dev/bindings/go/imports/net/http/transport"
+	"github.com/hayride-dev/bindings/go/wasi/net/http/transport"
 )
 
 func main() {
 	client := &http.Client{
-		Transport: transport.NewWasiRoundTripper(),
+		Transport: transport.New(),
 	}
 
 	resp, err := client.Get("https://postman-echo.com/get?foo1=bar1&foo2=bar2")

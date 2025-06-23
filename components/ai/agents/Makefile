@@ -1,13 +1,10 @@
-.PHONY: all test build
+.PHONY: all gen build
 
 default: all
 
-all: build
+all: gen build
 
-TAGS ?= default
+gen:
+	wit-bindgen-go generate --world hayride:agents/default --out ./internal/gen ./wit
 
-AGENT ?= default.go
-
-test: ; tinygo test --tags $(TAGS) -target wasip2 --wit-package ./wit/ --wit-world agent ./.
-
-build: ; tinygo build --tags $(TAGS) -target wasip2 --wit-package ./wit/ --wit-world agent $(AGENT)
+build: ; tinygo build -target wasip2 --wit-package ./wit/ --wit-world default default.go

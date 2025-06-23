@@ -5,19 +5,23 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
 	"github.com/hayride-dev/bindings/go/gen/types/hayride/ai/types"
-	"github.com/hayride-dev/bindings/go/imports/ai/agents"
-	"github.com/hayride-dev/bindings/go/imports/wasi/cli"
+	"github.com/hayride-dev/bindings/go/hayride/ai/agents"
+	"github.com/hayride-dev/bindings/go/wasi/cli"
 	"go.bytecodealliance.org/cm"
 )
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("What can I help with?")
-	a := agents.NewAgent()
+	a, err := agents.New()
+	if err != nil {
+		log.Fatal("failed to create agent:", err)
+	}
 
 	for {
 		input, _ := reader.ReadString('\n')
@@ -37,7 +41,7 @@ func main() {
 			}),
 		}
 
-		err := a.InvokeStream([]types.Message{msg}, cli.GetStdout(true))
+		err := a.InvokeStream(msg, cli.GetStdout(true))
 		if err != nil {
 			fmt.Println("error invoking agent:", err)
 			os.Exit(1)
