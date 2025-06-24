@@ -5,6 +5,7 @@ world cli {
     include hayride:wasip2/exports@0.0.55;
     
     import hayride:ai/agents@0.0.55;
+    import hayride:ai/model-repository@0.0.55;
     import hayride:ai/graph-stream@0.0.55;
 }
 

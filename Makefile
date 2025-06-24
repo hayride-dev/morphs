@@ -1,4 +1,4 @@
-.PHONY: build $(SUBDIRS) register compose register-datetime register-default-agent register-llama register-inmemory register-cli compose-cli compose-server
+.PHONY: build $(SUBDIRS) register compose register-default-tools register-datetime register-default-agent register-llama register-inmemory register-cli compose-cli compose-server register-composed
 
 SUBDIRS := $(shell find . -mindepth 1 -maxdepth 4 -type d -exec test -f '{}/Makefile' \; -print)
 
@@ -10,6 +10,9 @@ build:
 		$(MAKE) -C $$dir build; \
 	done
 
+register-default-tools:
+	hayride register --bin ./components/ai/tools/tools.wasm --package hayride:default-tools@0.0.1
+
 register-datetime:
 	hayride register --bin ./components/ai/tools/datetime/target/wasm32-wasip2/release/datetime.wasm --package hayride:datetime@0.0.1
 
@@ -17,7 +20,7 @@ register-default-agent:
 	hayride register --bin ./components/ai/agents/default.wasm --package hayride:default-agent@0.0.1
 
 register-llama:
-	hayride register --bin ./components/ai/models/llama-3.1.wasm --package hayride:llama31@0.0.1
+	hayride register --bin ./components/ai/models/llama31.wasm --package hayride:llama31@0.0.1
 
 register-inmemory:
 	hayride register --bin ./components/ai/contexts/inmemory.wasm --package hayride:inmemory@0.0.1
@@ -34,3 +37,8 @@ compose-server:
 	hayride wac compose --path ./compositions/default-agent-server.wac --out ./compositions/composed-server-agent.wasm
 
 compose: compose-cli compose-server
+
+register-cli-agent:
+	hayride register --bin ./compositions/composed-cli-agent.wasm --package hayride:composed-cli-agent@0.0.1
+
+register-composed: register-cli-agent
