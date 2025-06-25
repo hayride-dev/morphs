@@ -29,12 +29,15 @@ register-cli:
 	hayride register --bin ./components/ai/runners/cli.wasm --package hayride:cli@0.0.1
 
 register-http:
-	hayride register --bin ./components/ai/runners/http.wasm --package hayride:http-runner@0.0.1
+	hayride register --bin ./components/ai/runners/http.wasm --package hayride:http@0.0.1
 
-register: register-default-tools register-datetime register-default-agent register-llama register-inmemory register-cli
+register: register-default-tools register-datetime register-default-agent register-llama register-inmemory register-cli register-http
 
 compose-cli:
 	hayride wac compose --path ./compositions/default-agent-cli.wac --out ./compositions/composed-cli-agent.wasm
+
+compose-http:
+	hayride wac compose --path ./compositions/default-agent-http.wac --out ./compositions/composed-http-agent.wasm
 
 compose-server:
 	hayride wac compose --path ./compositions/default-agent-server.wac --out ./compositions/composed-server-agent.wasm
@@ -43,6 +46,9 @@ compose: compose-cli compose-server
 
 register-cli-agent:
 	hayride register --bin ./compositions/composed-cli-agent.wasm --package hayride:composed-cli-agent@0.0.1
+
+register-http-agent:
+	hayride register --bin ./compositions/composed-http-agent.wasm --package hayride:composed-http-agent@0.0.1
 
 register-server-agent:
 	hayride register --bin ./compositions/composed-server-agent.wasm --package hayride:composed-server-agent@0.0.1

@@ -1,0 +1,25 @@
+package hayride:agent;
+
+let context = new hayride:inmemory@0.0.1 {...}; 
+
+let llama = new hayride:llama31@0.0.1 {...};
+
+let tools = new hayride:default-tools@0.0.1 {...};
+
+let agent = new hayride:default-agent@0.0.1 {
+  context: context.context,
+  model: llama.model,
+  tools: tools.tools,
+  ...
+};
+
+let http = new hayride:http@0.0.1 {
+  context: context.context,
+  model: llama.model,
+  tools: tools.tools,
+  agents: agent.agents,
+  ...
+};
+
+// Export the server handler and config
+export http...;

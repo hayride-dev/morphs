@@ -10,7 +10,7 @@ world cli {
 
 world http {
     include hayride:wasip2/imports@0.0.55;
-    export wasi:http/incoming-handler@0.2.0;
+    include hayride:http/server@0.0.55;
    
     import hayride:ai/agents@0.0.55;
     import hayride:ai/model-repository@0.0.55;
