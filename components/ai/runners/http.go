@@ -5,26 +5,35 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/hayride-dev/bindings/go/gen/types/hayride/ai/types"
 	"github.com/hayride-dev/bindings/go/hayride/ai/agents"
-	"github.com/hayride-dev/bindings/go/wasi/net/http/handle"
+	"github.com/hayride-dev/bindings/go/hayride/ai/models/repository"
+	"github.com/hayride-dev/bindings/go/hayride/net/http/server"
+	"go.bytecodealliance.org/cm"
 )
 
 type promptReq struct {
-	msgs types.Message `json:"message"`
+	Message string `json:"message"`
 }
 
 type promptResp struct {
-	result types.Message `json:"result"`
+	Result types.Message `json:"result"`
 }
 
 func init() {
-	a, err := agents.New()
+	path, err := repository.Download("bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf")
+	if err != nil {
+		log.Fatal("failed to download model:", err)
+	}
+
+	a, err := agents.New(
+		agents.WithModel(path),
+		agents.WithName("Helpful Agent"),
+		agents.WithInstruction("You are a helpful assistant. Answer the user's questions to the best of your ability."),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -32,34 +41,47 @@ func init() {
 		agent: a,
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/generate", h.handlerfunc)
-	handle.Handler(mux)
+	mux.HandleFunc("/generate", h.handlerFunc)
+
+	// Configure the address for the spawned HTTP server
+	server.Export(mux, server.Config{
+		Address: "http://localhost:8083",
+	})
 }
 
 type handler struct {
 	agent agents.Agent
 }
 
-func (h *handler) handlerfunc(w http.ResponseWriter, r *http.Request) {
+func (h *handler) handlerFunc(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 
-	b, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "failed to read request body: "+err.Error(), http.StatusBadRequest)
+	var req promptReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "failed to decode request body: "+err.Error(), http.StatusBadRequest)
+		return
 	}
 
-	req := &promptReq{}
-	if err := json.Unmarshal(b, req); err != nil {
-		http.Error(w, "failed to unmarshal request body: "+err.Error(), http.StatusBadRequest)
+	fmt.Println("Received message:", req.Message)
+
+	msg := types.Message{
+		Role: types.RoleUser,
+		Content: cm.ToList([]types.Content{
+			types.ContentText(types.TextContent{
+				Text:        req.Message,
+				ContentType: "text/plain",
+			}),
+		}),
 	}
 
-	response, err := h.agent.Invoke(req.msgs)
+	response, err := h.agent.Invoke(msg)
 	if err != nil {
-		fmt.Println("error invoking agent:", err)
-		os.Exit(1)
+		http.Error(w, "failed to invoke agent: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	resp := &promptResp{
-		result: *response,
+		Result: *response,
 	}
 
 	result, err := json.Marshal(resp)

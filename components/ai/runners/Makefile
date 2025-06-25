@@ -4,10 +4,10 @@ default: all
 
 all: build
 
-TAGS ?= cli
+build-cli:
+	tinygo build --tags cli -target wasip2 --wit-package ./wit/ --wit-world cli cli.go
 
-RUNNER ?= cli.go
+build-http:
+	tinygo build --tags http -target wasip2 --wit-package ./wit/ --wit-world http http.go
 
-WORLD ?= cli
-
-build: ; tinygo build --tags $(TAGS) -target wasip2 --wit-package ./wit/ --wit-world $(WORLD) $(RUNNER)
+build: build-cli build-http
