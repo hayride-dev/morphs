@@ -41,4 +41,7 @@ compose: compose-cli compose-server
 register-cli-agent:
 	hayride register --bin ./compositions/composed-cli-agent.wasm --package hayride:composed-cli-agent@0.0.1
 
-register-composed: register-cli-agent
+register-server-agent:
+	hayride register --bin ./compositions/composed-server-agent.wasm --package hayride:composed-server-agent@0.0.1
+
+register-composed: register-cli-agent register-server-agent
