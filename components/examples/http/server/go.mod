@@ -2,6 +2,8 @@ module github.com/hayride-dev/morphs/components/examples/http/server
 
 go 1.23.6
 
-require github.com/hayride-dev/bindings v0.0.39
+replace github.com/hayride-dev/bindings => ../../../../../bindings
+
+require github.com/hayride-dev/bindings v0.0.40
 
 require go.bytecodealliance.org/cm v0.2.2 // indirect
