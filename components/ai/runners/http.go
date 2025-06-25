@@ -12,6 +12,7 @@ import (
 
 	"github.com/hayride-dev/bindings/go/gen/types/hayride/ai/types"
 	"github.com/hayride-dev/bindings/go/hayride/ai/agents"
+	"github.com/hayride-dev/bindings/go/hayride/ai/models/repository"
 	"github.com/hayride-dev/bindings/go/wasi/net/http/handle"
 )
 
@@ -24,7 +25,17 @@ type promptResp struct {
 }
 
 func init() {
-	a, err := agents.New()
+
+	path, err := repository.Download("bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf")
+	if err != nil {
+		log.Fatal("failed to download model:", err)
+	}
+
+	a, err := agents.New(
+		agents.WithModel(path),
+		agents.WithName("Helpful Agent"),
+		agents.WithInstruction("You are a helpful assistant. Answer the user's questions to the best of your ability."),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}

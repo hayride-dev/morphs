@@ -28,6 +28,9 @@ register-inmemory:
 register-cli:
 	hayride register --bin ./components/ai/runners/cli.wasm --package hayride:cli@0.0.1
 
+register-http:
+	hayride register --bin ./components/ai/runners/http.wasm --package hayride:http-runner@0.0.1
+
 register: register-default-tools register-datetime register-default-agent register-llama register-inmemory register-cli
 
 compose-cli:
