@@ -53,4 +53,5 @@ register-http-agent:
 register-server-agent:
 	hayride register --bin ./compositions/composed-server-agent.wasm --package hayride:composed-server-agent@0.0.1
 
-register-composed: register-cli-agent register-server-agent
+register-composed: register-cli-agent register-http-agent register-server-agent
+
