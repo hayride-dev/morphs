@@ -5,14 +5,7 @@ package agents
 import (
 	"github.com/hayride-dev/morphs/components/ai/agents/internal/gen/hayride/ai/types"
 	"go.bytecodealliance.org/cm"
-	"unsafe"
 )
-
-// MessageShape is used for storage in variant or result types.
-type MessageShape struct {
-	_     cm.HostLayout
-	shape [unsafe.Sizeof(Message{})]byte
-}
 
 func lift_Message(f0 uint32, f1 *types.Content, f2 uint32) (v types.Message) {
 	v.Role = (types.Role)(f0)

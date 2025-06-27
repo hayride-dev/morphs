@@ -24,7 +24,7 @@ func init() {
 
 type noopTools struct{}
 
-func constructor(t cm.List[tools.ToolSchema]) tools.Tools {
+func constructor() tools.Tools {
 	noop := &noopTools{}
 	key := cm.Rep(uintptr(*(*unsafe.Pointer)(unsafe.Pointer(&noop))))
 	v := tools.ToolsResourceNew(key)
