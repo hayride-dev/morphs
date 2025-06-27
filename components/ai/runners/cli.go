@@ -28,6 +28,7 @@ func main() {
 		log.Fatal("failed to download model:", err)
 	}
 
+	// Initialize the context, tools, and model format
 	ctx, err := ctx.New()
 	if err != nil {
 		log.Fatal("failed to create context:", err)
