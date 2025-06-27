@@ -6,9 +6,9 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// Exports represents the caller-defined exports from "hayride:ai/tools@0.0.55".
+// Exports represents the caller-defined exports from "hayride:ai/tools@0.0.56".
 var Exports struct {
-	// Error represents the caller-defined exports for resource "hayride:ai/tools@0.0.55#error".
+	// Error represents the caller-defined exports for resource "hayride:ai/tools@0.0.56#error".
 	Error struct {
 		// Destructor represents the caller-defined, exported destructor for resource "error".
 		//
@@ -30,7 +30,7 @@ var Exports struct {
 		Data func(self cm.Rep) (result string)
 	}
 
-	// Tools represents the caller-defined exports for resource "hayride:ai/tools@0.0.55#tools".
+	// Tools represents the caller-defined exports for resource "hayride:ai/tools@0.0.56#tools".
 	Tools struct {
 		// Destructor represents the caller-defined, exported destructor for resource "tools".
 		//
@@ -39,8 +39,8 @@ var Exports struct {
 
 		// Constructor represents the caller-defined, exported constructor for resource "tools".
 		//
-		//	constructor(tools: list<tool-schema>)
-		Constructor func(tools cm.List[ToolSchema]) (result Tools)
+		//	constructor()
+		Constructor func() (result Tools)
 
 		// Call represents the caller-defined, exported method "call".
 		//

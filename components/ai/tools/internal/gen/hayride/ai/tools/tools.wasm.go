@@ -6,30 +6,30 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "hayride:ai@0.0.55".
+// This file contains wasmimport and wasmexport declarations for "hayride:ai@0.0.56".
 
-//go:wasmimport [export]hayride:ai/tools@0.0.55 [resource-new]error
+//go:wasmimport [export]hayride:ai/tools@0.0.56 [resource-new]error
 //go:noescape
 func wasmimport_ErrorResourceNew(rep0 uint32) (result0 uint32)
 
-//go:wasmimport [export]hayride:ai/tools@0.0.55 [resource-rep]error
+//go:wasmimport [export]hayride:ai/tools@0.0.56 [resource-rep]error
 //go:noescape
 func wasmimport_ErrorResourceRep(self0 uint32) (result0 uint32)
 
-//go:wasmimport [export]hayride:ai/tools@0.0.55 [resource-drop]error
+//go:wasmimport [export]hayride:ai/tools@0.0.56 [resource-drop]error
 //go:noescape
 func wasmimport_ErrorResourceDrop(self0 uint32)
 
-//go:wasmexport hayride:ai/tools@0.0.55#[dtor]error
-//export hayride:ai/tools@0.0.55#[dtor]error
+//go:wasmexport hayride:ai/tools@0.0.56#[dtor]error
+//export hayride:ai/tools@0.0.56#[dtor]error
 func wasmexport_ErrorDestructor(self0 uint32) {
 	self := cm.Reinterpret[cm.Rep]((uint32)(self0))
 	Exports.Error.Destructor(self)
 	return
 }
 
-//go:wasmexport hayride:ai/tools@0.0.55#[method]error.code
-//export hayride:ai/tools@0.0.55#[method]error.code
+//go:wasmexport hayride:ai/tools@0.0.56#[method]error.code
+//export hayride:ai/tools@0.0.56#[method]error.code
 func wasmexport_ErrorCode(self0 uint32) (result0 uint32) {
 	self := cm.Reinterpret[cm.Rep]((uint32)(self0))
 	result := Exports.Error.Code(self)
@@ -37,8 +37,8 @@ func wasmexport_ErrorCode(self0 uint32) (result0 uint32) {
 	return
 }
 
-//go:wasmexport hayride:ai/tools@0.0.55#[method]error.data
-//export hayride:ai/tools@0.0.55#[method]error.data
+//go:wasmexport hayride:ai/tools@0.0.56#[method]error.data
+//export hayride:ai/tools@0.0.56#[method]error.data
 func wasmexport_ErrorData(self0 uint32) (result *string) {
 	self := cm.Reinterpret[cm.Rep]((uint32)(self0))
 	result_ := Exports.Error.Data(self)
@@ -46,37 +46,36 @@ func wasmexport_ErrorData(self0 uint32) (result *string) {
 	return
 }
 
-//go:wasmimport [export]hayride:ai/tools@0.0.55 [resource-new]tools
+//go:wasmimport [export]hayride:ai/tools@0.0.56 [resource-new]tools
 //go:noescape
 func wasmimport_ToolsResourceNew(rep0 uint32) (result0 uint32)
 
-//go:wasmimport [export]hayride:ai/tools@0.0.55 [resource-rep]tools
+//go:wasmimport [export]hayride:ai/tools@0.0.56 [resource-rep]tools
 //go:noescape
 func wasmimport_ToolsResourceRep(self0 uint32) (result0 uint32)
 
-//go:wasmimport [export]hayride:ai/tools@0.0.55 [resource-drop]tools
+//go:wasmimport [export]hayride:ai/tools@0.0.56 [resource-drop]tools
 //go:noescape
 func wasmimport_ToolsResourceDrop(self0 uint32)
 
-//go:wasmexport hayride:ai/tools@0.0.55#[dtor]tools
-//export hayride:ai/tools@0.0.55#[dtor]tools
+//go:wasmexport hayride:ai/tools@0.0.56#[dtor]tools
+//export hayride:ai/tools@0.0.56#[dtor]tools
 func wasmexport_ToolsDestructor(self0 uint32) {
 	self := cm.Reinterpret[cm.Rep]((uint32)(self0))
 	Exports.Tools.Destructor(self)
 	return
 }
 
-//go:wasmexport hayride:ai/tools@0.0.55#[constructor]tools
-//export hayride:ai/tools@0.0.55#[constructor]tools
-func wasmexport_Constructor(tools0 *ToolSchema, tools1 uint32) (result0 uint32) {
-	tools := cm.LiftList[cm.List[ToolSchema]]((*ToolSchema)(tools0), (uint32)(tools1))
-	result := Exports.Tools.Constructor(tools)
+//go:wasmexport hayride:ai/tools@0.0.56#[constructor]tools
+//export hayride:ai/tools@0.0.56#[constructor]tools
+func wasmexport_Constructor() (result0 uint32) {
+	result := Exports.Tools.Constructor()
 	result0 = cm.Reinterpret[uint32](result)
 	return
 }
 
-//go:wasmexport hayride:ai/tools@0.0.55#[method]tools.call
-//export hayride:ai/tools@0.0.55#[method]tools.call
+//go:wasmexport hayride:ai/tools@0.0.56#[method]tools.call
+//export hayride:ai/tools@0.0.56#[method]tools.call
 func wasmexport_ToolsCall(self0 uint32, input0 *uint8, input1 uint32, input2 *uint8, input3 uint32, input4 *uint8, input5 uint32, input6 *[2]string, input7 uint32) (result *cm.Result[ToolOutputShape, ToolOutput, ErrorCode]) {
 	self := cm.Reinterpret[cm.Rep]((uint32)(self0))
 	input := lift_ToolInput((*uint8)(input0), (uint32)(input1), (*uint8)(input2), (uint32)(input3), (*uint8)(input4), (uint32)(input5), (*[2]string)(input6), (uint32)(input7))
@@ -85,8 +84,8 @@ func wasmexport_ToolsCall(self0 uint32, input0 *uint8, input1 uint32, input2 *ui
 	return
 }
 
-//go:wasmexport hayride:ai/tools@0.0.55#[method]tools.capabilities
-//export hayride:ai/tools@0.0.55#[method]tools.capabilities
+//go:wasmexport hayride:ai/tools@0.0.56#[method]tools.capabilities
+//export hayride:ai/tools@0.0.56#[method]tools.capabilities
 func wasmexport_ToolsCapabilities(self0 uint32) (result *cm.Result[cm.List[ToolSchema], cm.List[ToolSchema], Error]) {
 	self := cm.Reinterpret[cm.Rep]((uint32)(self0))
 	result_ := Exports.Tools.Capabilities(self)

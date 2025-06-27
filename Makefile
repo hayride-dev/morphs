@@ -42,7 +42,7 @@ compose-http:
 compose-server:
 	hayride wac compose --path ./compositions/default-agent-server.wac --out ./compositions/composed-server-agent.wasm
 
-compose: compose-cli compose-server
+compose: compose-cli compose-http compose-server
 
 register-cli-agent:
 	hayride register --bin ./compositions/composed-cli-agent.wasm --package hayride:composed-cli-agent@0.0.1
