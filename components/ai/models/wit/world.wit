@@ -1,6 +1,6 @@
 package hayride:models@0.0.1;
 
 world llm {
-    include hayride:wasip2/imports@0.0.56;
-    export hayride:ai/model@0.0.56;
+    include hayride:wasip2/imports@0.0.57;
+    export hayride:ai/model@0.0.57;
 }
