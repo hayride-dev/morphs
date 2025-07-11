@@ -8,14 +8,14 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/hayride-dev/bindings/go/gen/types/hayride/ai/types"
 	"github.com/hayride-dev/bindings/go/hayride/ai/agents"
 	"github.com/hayride-dev/bindings/go/hayride/ai/ctx"
 	"github.com/hayride-dev/bindings/go/hayride/ai/graph"
 	"github.com/hayride-dev/bindings/go/hayride/ai/models"
 	"github.com/hayride-dev/bindings/go/hayride/ai/models/repository"
 	"github.com/hayride-dev/bindings/go/hayride/ai/tools"
-	"github.com/hayride-dev/bindings/go/hayride/net/http/server"
+	"github.com/hayride-dev/bindings/go/hayride/types"
+	"github.com/hayride-dev/bindings/go/hayride/x/net/http/server/export"
 	"go.bytecodealliance.org/cm"
 )
 
@@ -28,7 +28,7 @@ type promptResp struct {
 }
 
 func init() {
-	path, err := repository.Download("bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf")
+	path, err := repository.DownloadModel("bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf")
 	if err != nil {
 		log.Fatal("failed to download model:", err)
 	}
@@ -75,7 +75,7 @@ func init() {
 	mux.HandleFunc("/generate", h.handlerFunc)
 
 	// Configure the address for the spawned HTTP server
-	server.Export(mux, server.Config{
+	export.ServerConfig(mux, types.ServerConfig{
 		Address: "http://localhost:8083",
 	})
 }
@@ -98,7 +98,7 @@ func (h *handler) handlerFunc(w http.ResponseWriter, r *http.Request) {
 	msg := types.Message{
 		Role: types.RoleUser,
 		Content: cm.ToList([]types.Content{
-			types.ContentText(types.TextContent{
+			types.NewContent(types.TextContent{
 				Text:        req.Message,
 				ContentType: "text/plain",
 			}),
