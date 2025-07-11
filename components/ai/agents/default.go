@@ -77,10 +77,12 @@ func constructor(name string, instruction string, tools_ agents.Tools, context_ 
 		return cm.ResourceNone
 	}
 	for _, t := range result.OK().Slice() {
-		content = append(content, types.ContentToolSchema(t))
+		content = append(content, types.ContentToolSchema(cm.Reinterpret[types.ToolSchema](t)))
 	}
 
-	agent.context.Push(agents.Message{Role: types.RoleSystem, Content: cm.ToList(content)})
+	msg := types.Message{Role: 1, Content: cm.ToList(content)}
+
+	agent.context.Push(cm.Reinterpret[agents.Message](msg))
 
 	key := cm.Rep(uintptr(unsafe.Pointer(agent)))
 	v := agents.AgentResourceNew(key)
