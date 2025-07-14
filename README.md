@@ -93,7 +93,7 @@ This composition creates a command line interface that can interact with AI agen
 
 We welcome contributions from the community! If you have a morph that you'd like to share, please submit a pull request.
 
-Currently, the easiest morph to develop is the `hayride:ai/model` morph, which provides LLM sepecific token formatting and encoding. Adding model support is a great way to get started with morph development.
+Currently, the easiest morph to develop is the `hayride:ai/model` morph, which provides LLM specific token formatting and encoding. Adding model support is a great way to get started with morph development.
 
 ## Contributing
 Contributions are welcome! If you'd like to contribute, please follow these steps:
