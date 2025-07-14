@@ -38,7 +38,7 @@ Morphs can be composed together to create more complex functionality. This allow
 
 Hayride defines WebAssembly Interfaces in [coven](https://github.com/hayride-dev/coven).
 
-Taking a look at the WIT defintions for the cli AI `runner`: 
+Taking a look at the WIT definitions for the cli AI `runner`: 
 ```
 world cli {
     include hayride:wasip2/imports@0.0.59;
