@@ -22,8 +22,8 @@ AI Agents is an example of a reactor component that implements the `hayride:ai/a
 package hayride:agents@0.0.1;
 
 world default {
-    include hayride:wasip2/imports@0.0.59;
-    export hayride:ai/agents@0.0.59;
+    include hayride:wasip2/imports@0.0.60;
+    export hayride:ai/agents@0.0.60;
 }
 ```
 
@@ -41,11 +41,11 @@ Hayride defines WebAssembly Interfaces in [coven](https://github.com/hayride-dev
 Taking a look at the WIT definitions for the cli AI `runner`: 
 ```
 world cli {
-    include hayride:wasip2/imports@0.0.59;
-    include hayride:wasip2/exports@0.0.59;
+    include hayride:wasip2/imports@0.0.60;
+    include hayride:wasip2/exports@0.0.60;
     
-    import hayride:ai/agents@0.0.59;
-    import hayride:ai/model-repository@0.0.59;
+    import hayride:ai/agents@0.0.60;
+    import hayride:ai/model-repository@0.0.60;
 }
 ```
 
