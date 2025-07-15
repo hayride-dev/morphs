@@ -1,6 +1,6 @@
 package hayride:agents@0.0.1;
 
 world default {
-    include hayride:wasip2/imports@0.0.59;
-    export hayride:ai/agents@0.0.59;
+    include hayride:wasip2/imports@0.0.60;
+    export hayride:ai/agents@0.0.60;
 }
