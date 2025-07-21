@@ -94,7 +94,7 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 			return types.Message{}, fmt.Errorf("failed to parse assistant message, invalid function formation")
 		}
 
-		pkg := matches[0]
+		// pkg := matches[0] TODO: Fix pkg name usage
 		name := matches[1]
 		argsString := matches[2]
 
@@ -121,12 +121,11 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 		}
 		return types.Message{
 			Role: types.RoleAssistant,
-			Content: cm.ToList([]types.Content{
-				types.ContentToolInput(types.ToolInput{
-					ID:          pkg,
-					Name:        name,
-					Input:       cm.ToList(args),
-					ContentType: "tool-input",
+			Content: cm.ToList([]types.MessageContent{
+				types.MessageContentToolInput(types.CallToolParams{
+					// ID:          pkg,
+					Name:      name,
+					Arguments: cm.ToList(args),
 				}),
 			}),
 		}, nil
@@ -161,12 +160,11 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 
 			return types.Message{
 				Role: types.RoleAssistant,
-				Content: cm.ToList([]types.Content{
-					types.ContentToolInput(types.ToolInput{
-						ID:          result["pkg"],
-						Name:        result["name"],
-						Input:       cm.ToList(input),
-						ContentType: "tool-input",
+				Content: cm.ToList([]types.MessageContent{
+					types.MessageContentToolInput(types.CallToolParams{
+						// ID:          result["pkg"],
+						Name:      result["name"],
+						Arguments: cm.ToList(input),
 					}),
 				}),
 			}, nil
@@ -177,11 +175,8 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 
 	return types.Message{
 		Role: types.RoleAssistant,
-		Content: cm.ToList([]types.Content{
-			types.ContentText(types.TextContent{
-				Text:        msg,
-				ContentType: "text",
-			}),
+		Content: cm.ToList([]types.MessageContent{
+			types.MessageContentText(msg),
 		}),
 	}, nil
 }
@@ -200,15 +195,15 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 			builder.WriteString(fmt.Sprintf("%s\n", env))
 
 			// message body, collect tool schema definitions
-			tools := []*types.ToolSchema{}
+			tools := []types.Tool{}
 			for _, content := range msg.Content.Slice() {
 				switch content.String() {
 				case "text":
 					c := content.Text()
-					builder.WriteString(fmt.Sprintf("%s\n", c.Text))
-				case "tool-schema":
-					c := content.ToolSchema()
-					tools = append(tools, c)
+					builder.WriteString(fmt.Sprintf("%s\n", *c))
+				case "tools":
+					c := content.Tools().Slice()
+					tools = c
 				}
 			}
 
@@ -228,7 +223,7 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 			for _, content := range msg.Content.Slice() {
 				if content.String() == "text" {
 					c := content.Text()
-					builder.WriteString(fmt.Sprintf("%s\n", c.Text))
+					builder.WriteString(fmt.Sprintf("%s\n", *c))
 				}
 			}
 			// end turn
@@ -241,12 +236,12 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 				switch content.String() {
 				case "text":
 					c := content.Text()
-					builder.WriteString(fmt.Sprintf("%s\n", c.Text))
+					builder.WriteString(fmt.Sprintf("%s\n", *c))
 					builder.WriteString(endOfTurn)
 				case "tool-input":
 					c := content.ToolInput()
 					// TODO : support other function call ai
-					builder.WriteString(fmt.Sprintf("<function=%s %s>%s<\\function>\n", c.ID, c.Name, c.Input))
+					builder.WriteString(fmt.Sprintf("<function=%s>%s<\\function>\n", c.Name, c.Arguments))
 					// end turn
 					builder.WriteString(endOfMessage)
 				}
@@ -257,8 +252,30 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 			// message body ( tool output )
 			for _, content := range msg.Content.Slice() {
 				if content.String() == "tool-output" {
-					c := content.ToolOutput()
-					builder.WriteString(fmt.Sprintf("%s\n", c.Output))
+					output := content.ToolOutput()
+					for _, c := range output.Content.Slice() {
+						switch c.String() {
+						case "text":
+							builder.WriteString(fmt.Sprintf("%s\n", c.Text().Text))
+						case "image":
+							image := c.Image()
+							builder.WriteString(fmt.Sprintf("Image Data: %v\n", image.Data))
+						case "audio":
+							audio := c.Audio()
+							builder.WriteString(fmt.Sprintf("Audio Data: %v\n", audio.Data))
+						case "resource-link":
+							resource := c.ResourceLink()
+							builder.WriteString(fmt.Sprintf("Resource Link: %s\n", resource.URI))
+						case "resource-content":
+							content := c.ResourceContent()
+							switch content.ResourceContents.String() {
+							case "text":
+								builder.WriteString(fmt.Sprintf("Resource Content (Text): %s\n", content.ResourceContents.Text()))
+							case "blob":
+								builder.WriteString(fmt.Sprintf("Resource Content (Blob): %s\n", content.ResourceContents.Blob()))
+							}
+						}
+					}
 				}
 			}
 			// end turn
@@ -275,7 +292,7 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 	return []byte(builder.String()), nil
 }
 
-func customToolEncode(tools []*types.ToolSchema) string {
+func customToolEncode(tools []types.Tool) string {
 	if len(tools) == 0 {
 		return ""
 	}
@@ -292,10 +309,21 @@ func customToolEncode(tools []*types.ToolSchema) string {
 	{
 	`
 	for _, tool := range tools {
-		result += fmt.Sprintf(`"name": "%s %s",\n`, tool.ID, tool.Name)
+		result += fmt.Sprintf(`"name": "%s",\n`, tool.Name)
 		result += fmt.Sprintf(`"description": "%s",\n`, tool.Description)
-		if tool.ParamsSchema != "" {
-			result += fmt.Sprintf(`"params": %s,\n`, tool.ParamsSchema)
+		// Add input schema properties
+		if len(tool.InputSchema.Properties.Slice()) > 0 {
+			result += `"parameters": {`
+			for i, prop := range tool.InputSchema.Properties.Slice() {
+				result += fmt.Sprintf(`"%s":`, prop[0])
+				result += fmt.Sprintf(`"%s"`, prop[1])
+				if i < len(tool.InputSchema.Properties.Slice())-1 {
+					result += ", "
+				}
+			}
+			result += "},\n"
+		} else {
+			result += `"parameters": {},\n`
 		}
 	}
 

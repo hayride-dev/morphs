@@ -1,3 +1,5 @@
 github.com/hayride-dev/bindings v0.0.44 h1:0Avy4gIrXcQILwSgypaZZGa46lOSql2oHhp2pdRomWw=
 github.com/hayride-dev/bindings v0.0.44/go.mod h1:v04DWJHecixRqG+FSz9rQPDqQg0SZdGlhgzlu/xGSug=
+github.com/hayride-dev/bindings v0.0.50 h1:YJBy4DjlEOjKXmh2Cj8AaUf1Y5wMDSzwdkyuqllRA84=
+github.com/hayride-dev/bindings v0.0.50/go.mod h1:v04DWJHecixRqG+FSz9rQPDqQg0SZdGlhgzlu/xGSug=
 go.bytecodealliance.org/cm v0.2.0/go.mod h1:JD5vtVNZv7sBoQQkvBvAAVKJPhR/bqBH7yYXTItMfZI=

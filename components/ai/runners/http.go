@@ -13,7 +13,7 @@ import (
 	"github.com/hayride-dev/bindings/go/hayride/ai/graph"
 	"github.com/hayride-dev/bindings/go/hayride/ai/models"
 	"github.com/hayride-dev/bindings/go/hayride/ai/models/repository"
-	"github.com/hayride-dev/bindings/go/hayride/ai/tools"
+	"github.com/hayride-dev/bindings/go/hayride/mcp/tools"
 	"github.com/hayride-dev/bindings/go/hayride/types"
 	"github.com/hayride-dev/bindings/go/hayride/x/net/http/server/export"
 	"go.bytecodealliance.org/cm"
@@ -97,11 +97,8 @@ func (h *handler) handlerFunc(w http.ResponseWriter, r *http.Request) {
 
 	msg := types.Message{
 		Role: types.RoleUser,
-		Content: cm.ToList([]types.Content{
-			types.NewContent(types.TextContent{
-				Text:        req.Message,
-				ContentType: "text/plain",
-			}),
+		Content: cm.ToList([]types.MessageContent{
+			types.NewMessageContent(types.Text(req.Message)),
 		}),
 	}
 

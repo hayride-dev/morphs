@@ -67,18 +67,16 @@ func constructor(name string, instruction string, tools_ agents.Tools, context_ 
 		graph:   graph,
 	}
 
-	content := []types.Content{}
-	content = append(content, types.ContentText(types.TextContent{
-		Text: instruction,
-	}))
+	content := []types.MessageContent{}
+	content = append(content, types.MessageContentText(instruction))
 
-	result := tools_.Capabilities()
+	result := tools_.ListTools("")
 	if result.IsErr() {
 		return cm.ResourceNone
 	}
-	for _, t := range result.OK().Slice() {
-		content = append(content, types.ContentToolSchema(cm.Reinterpret[types.ToolSchema](t)))
-	}
+
+	// Append the list of tools to the content
+	content = append(content, types.MessageContentTools(result.OK().Tools))
 
 	msg := types.Message{Role: 1, Content: cm.ToList(content)}
 
@@ -174,14 +172,14 @@ func invoke(self cm.Rep, input agents.Message) cm.Result[cm.List[agents.Message]
 			for _, c := range msg.Content.Slice() {
 				switch c.String() {
 				case "tool-input":
-					toolresult := agent.tools.Call(*c.ToolInput())
+					toolresult := agent.tools.CallTool(*c.ToolInput())
 					if toolresult.IsErr() {
 						err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 						return cm.Err[cm.Result[cm.List[agents.Message], cm.List[agents.Message], agents.Error]](err)
 					}
 					calledTool = true
 
-					toolCall := agents.Message{Role: types.RoleTool, Content: cm.ToList([]types.Content{types.ContentToolOutput(*toolresult.OK())})}
+					toolCall := agents.Message{Role: types.RoleTool, Content: cm.ToList([]types.MessageContent{types.MessageContentToolOutput(*toolresult.OK())})}
 
 					// Add the tool call to the messages
 					messages = append(messages, toolCall)
@@ -218,9 +216,7 @@ func invokeStream(self cm.Rep, message agents.Message, writer agents.OutputStrea
 		return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
 	}
 
-	finalMsg := &types.Message{Role: types.RoleAssistant, Content: cm.ToList([]types.Content{types.ContentText(types.TextContent{
-		Text: "agent yielded no response",
-	})})}
+	finalMsg := &types.Message{Role: types.RoleAssistant, Content: cm.ToList([]types.MessageContent{types.MessageContentText("agent yielded no response")})}
 
 	for i := 0; i <= maxturn; i++ {
 		result := agent.context.Messages()
@@ -293,14 +289,14 @@ func invokeStream(self cm.Rep, message agents.Message, writer agents.OutputStrea
 			for _, c := range msg.Content.Slice() {
 				switch c.String() {
 				case "tool-input":
-					toolresult := agent.tools.Call(*c.ToolInput())
+					toolresult := agent.tools.CallTool(*c.ToolInput())
 					if toolresult.IsErr() {
 						err := agents.ErrorResourceNew(cm.Rep(agents.ErrorCodeInvokeError))
 						return cm.Err[cm.Result[agents.Error, struct{}, agents.Error]](err)
 					}
 					calledTool = true
 					// Push the tool output to the context and re-compute with the tool output
-					agent.context.Push(agents.Message{Role: types.RoleTool, Content: cm.ToList([]types.Content{types.ContentToolOutput(*toolresult.OK())})})
+					agent.context.Push(agents.Message{Role: types.RoleTool, Content: cm.ToList([]types.MessageContent{types.MessageContentToolOutput(*toolresult.OK())})})
 				default:
 					// If the content is not a tool input, we can just continue
 					continue

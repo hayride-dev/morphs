@@ -14,7 +14,7 @@ import (
 	"github.com/hayride-dev/bindings/go/hayride/ai/graph"
 	"github.com/hayride-dev/bindings/go/hayride/ai/models"
 	"github.com/hayride-dev/bindings/go/hayride/ai/models/repository"
-	"github.com/hayride-dev/bindings/go/hayride/ai/tools"
+	"github.com/hayride-dev/bindings/go/hayride/mcp/tools"
 	"github.com/hayride-dev/bindings/go/hayride/types"
 	"github.com/hayride-dev/bindings/go/wasi/cli"
 	"go.bytecodealliance.org/cm"
@@ -75,11 +75,8 @@ func main() {
 
 		msg := types.Message{
 			Role: types.RoleUser,
-			Content: cm.ToList([]types.Content{
-				types.NewContent(types.TextContent{
-					Text:        input,
-					ContentType: "text/plain",
-				}),
+			Content: cm.ToList([]types.MessageContent{
+				types.NewMessageContent(types.Text(input)),
 			}),
 		}
 

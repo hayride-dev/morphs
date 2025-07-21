@@ -3,7 +3,7 @@ package main
 import (
 	"unsafe"
 
-	"github.com/hayride-dev/morphs/components/ai/tools/internal/gen/hayride/ai/tools"
+	"github.com/hayride-dev/morphs/components/ai/tools/internal/gen/hayride/mcp/tools"
 	"go.bytecodealliance.org/cm"
 )
 
@@ -17,8 +17,8 @@ var resourceTable = &resources{
 
 func init() {
 	tools.Exports.Tools.Constructor = constructor
-	tools.Exports.Tools.Call = call
-	tools.Exports.Tools.Capabilities = capabilities
+	tools.Exports.Tools.CallTool = call
+	tools.Exports.Tools.ListTools = list
 	tools.Exports.Tools.Destructor = destructor
 }
 
@@ -32,12 +32,12 @@ func constructor() tools.Tools {
 	return v
 }
 
-func call(self cm.Rep, input tools.ToolInput) (result cm.Result[tools.ToolOutputShape, tools.ToolOutput, tools.ErrorCode]) {
-	return cm.OK[cm.Result[tools.ToolOutputShape, tools.ToolOutput, tools.ErrorCode]](tools.ToolOutput{})
+func call(self cm.Rep, params tools.CallToolParams) (result cm.Result[tools.CallToolResultShape, tools.CallToolResult, tools.Error]) {
+	return cm.OK[cm.Result[tools.CallToolResultShape, tools.CallToolResult, tools.Error]](tools.CallToolResult{})
 }
 
-func capabilities(self cm.Rep) (result cm.Result[cm.List[tools.ToolSchema], cm.List[tools.ToolSchema], tools.Error]) {
-	return cm.OK[cm.Result[cm.List[tools.ToolSchema], cm.List[tools.ToolSchema], tools.Error]](cm.List[tools.ToolSchema]{})
+func list(self cm.Rep, cursor string) (result cm.Result[tools.ListToolsResultShape, tools.ListToolsResult, tools.Error]) {
+	return cm.OK[cm.Result[tools.ListToolsResultShape, tools.ListToolsResult, tools.Error]](tools.ListToolsResult{})
 }
 
 func destructor(self cm.Rep) {

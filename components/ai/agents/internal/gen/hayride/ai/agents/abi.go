@@ -7,8 +7,8 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-func lift_Message(f0 uint32, f1 *types.Content, f2 uint32) (v types.Message) {
+func lift_Message(f0 uint32, f1 *types.MessageContent, f2 uint32) (v types.Message) {
 	v.Role = (types.Role)(f0)
-	v.Content = cm.LiftList[cm.List[types.Content]](f1, f2)
+	v.Content = cm.LiftList[cm.List[types.MessageContent]](f1, f2)
 	return
 }
