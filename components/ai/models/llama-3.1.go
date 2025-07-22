@@ -18,8 +18,8 @@ var (
 	parseFunc = regexp.MustCompile(`\[([a-zA-Z_][a-zA-Z0-9_@:.\-\/ ]*)\((.*)\)\]`)
 
 	// The function definition for a custom defined function for llama 3.1
-	// Example: <function=example:id/package example_function_name>{"example_name": "example_value"}</function>
-	customFunc = regexp.MustCompile(`<function=(?P<pkg>[^\s>]+)\s+(?P<name>[^\s>]+)>\s*(?P<input>\{.*?\})?\s*<.*function>`)
+	// Example: <function=example_function_name>{"example_name": "example_value"}</function>
+	customFunc = regexp.MustCompile(`<function=(?P<name>[^\s>]+)>\s*(?P<input>\{.*?\})?\s*<.*function>`)
 
 	// Split the parameters by comma
 	parseFuncParams = regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*=('[^']*'|"[^"]*"|[^,]+)`)
@@ -94,9 +94,8 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 			return types.Message{}, fmt.Errorf("failed to parse assistant message, invalid function formation")
 		}
 
-		// pkg := matches[0] TODO: Fix pkg name usage
-		name := matches[1]
-		argsString := matches[2]
+		name := matches[0]
+		argsString := matches[1]
 
 		paramsList := parseFuncParams.FindAllString(argsString, -1)
 		var args [][2]string
@@ -123,7 +122,6 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 			Role: types.RoleAssistant,
 			Content: cm.ToList([]types.MessageContent{
 				types.MessageContentToolInput(types.CallToolParams{
-					// ID:          pkg,
 					Name:      name,
 					Arguments: cm.ToList(args),
 				}),
@@ -132,7 +130,7 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 	} else if strings.Contains(msg, "<function") {
 		// Custom function definition
 		matches := customFunc.FindStringSubmatch(msg)
-		if len(matches) != 4 {
+		if len(matches) != 3 {
 			return types.Message{}, fmt.Errorf("failed to parse assistant message, invalid function formation")
 		}
 
@@ -162,7 +160,6 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 				Role: types.RoleAssistant,
 				Content: cm.ToList([]types.MessageContent{
 					types.MessageContentToolInput(types.CallToolParams{
-						// ID:          result["pkg"],
 						Name:      result["name"],
 						Arguments: cm.ToList(input),
 					}),
@@ -241,7 +238,7 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 				case "tool-input":
 					c := content.ToolInput()
 					// TODO : support other function call ai
-					builder.WriteString(fmt.Sprintf("<function=%s>%s<\\function>\n", c.Name, c.Arguments))
+					builder.WriteString(fmt.Sprintf("<function=%s>%v</function>\n", c.Name, c.Arguments))
 					// end turn
 					builder.WriteString(endOfMessage)
 				}
@@ -272,7 +269,7 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 							case "text":
 								builder.WriteString(fmt.Sprintf("Resource Content (Text): %s\n", content.ResourceContents.Text()))
 							case "blob":
-								builder.WriteString(fmt.Sprintf("Resource Content (Blob): %s\n", content.ResourceContents.Blob()))
+								builder.WriteString(fmt.Sprintf("Resource Content (Blob): %v\n", content.ResourceContents.Blob()))
 							}
 						}
 					}
