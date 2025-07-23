@@ -1,5 +1,3 @@
-//go:build llama3
-
 package main
 
 import (
@@ -8,7 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/hayride-dev/morphs/components/ai/models/internal/gen/hayride/ai/types"
+	"github.com/hayride-dev/bindings/go/hayride/ai/models"
+	"github.com/hayride-dev/bindings/go/hayride/types"
 	"go.bytecodealliance.org/cm"
 )
 
@@ -75,14 +74,11 @@ const (
 	env = "Environment: ipython"
 )
 
-type llama3 struct {
-}
+var _ models.Format = (*llama3)(nil)
 
-func comptimeFormat() Format {
-	return &llama3{}
-}
+type llama3 struct{}
 
-func (m *llama3) Decode(data []byte) (types.Message, error) {
+func (m *llama3) Decode(data []byte) (*types.Message, error) {
 	msg := string(data)
 	if strings.Contains(msg, pythonTag) {
 		// remove python tags
@@ -91,7 +87,7 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 
 		matches := parseFunc.FindStringSubmatch(strings.TrimSpace(content))
 		if len(matches) != 3 {
-			return types.Message{}, fmt.Errorf("failed to parse assistant message, invalid function formation")
+			return nil, fmt.Errorf("failed to parse assistant message, invalid function formation")
 		}
 
 		name := matches[0]
@@ -103,7 +99,7 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 			// Split each parameter into name and value
 			paramParts := strings.SplitN(param, "=", 2)
 			if len(paramParts) != 2 {
-				return types.Message{}, fmt.Errorf("parameter format is invalid: %s", param)
+				return nil, fmt.Errorf("parameter format is invalid: %s", param)
 			}
 
 			// Trim spaces and quotes from key
@@ -118,10 +114,10 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 
 			args = append(args, [2]string{paramKey, paramValue})
 		}
-		return types.Message{
+		return &types.Message{
 			Role: types.RoleAssistant,
 			Content: cm.ToList([]types.MessageContent{
-				types.MessageContentToolInput(types.CallToolParams{
+				types.NewMessageContent(types.CallToolParams{
 					Name:      name,
 					Arguments: cm.ToList(args),
 				}),
@@ -131,7 +127,7 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 		// Custom function definition
 		matches := customFunc.FindStringSubmatch(msg)
 		if len(matches) != 3 {
-			return types.Message{}, fmt.Errorf("failed to parse assistant message, invalid function formation")
+			return nil, fmt.Errorf("failed to parse assistant message, invalid function formation")
 		}
 
 		if matches != nil {
@@ -148,7 +144,7 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 				var m map[string]string
 				err := json.Unmarshal([]byte(values), &m)
 				if err != nil {
-					return types.Message{}, fmt.Errorf("failed to parse input parameters: %v", err)
+					return nil, fmt.Errorf("failed to parse input parameters: %v", err)
 				}
 
 				for k, v := range m {
@@ -156,24 +152,24 @@ func (m *llama3) Decode(data []byte) (types.Message, error) {
 				}
 			}
 
-			return types.Message{
+			return &types.Message{
 				Role: types.RoleAssistant,
 				Content: cm.ToList([]types.MessageContent{
-					types.MessageContentToolInput(types.CallToolParams{
+					types.NewMessageContent(types.CallToolParams{
 						Name:      result["name"],
 						Arguments: cm.ToList(input),
 					}),
 				}),
 			}, nil
 		} else {
-			return types.Message{}, fmt.Errorf("failed to parse assistant message, invalid function formation")
+			return nil, fmt.Errorf("failed to parse assistant message, invalid function formation")
 		}
 	}
 
-	return types.Message{
+	return &types.Message{
 		Role: types.RoleAssistant,
 		Content: cm.ToList([]types.MessageContent{
-			types.MessageContentText(msg),
+			types.NewMessageContent(types.Text(msg)),
 		}),
 	}, nil
 }

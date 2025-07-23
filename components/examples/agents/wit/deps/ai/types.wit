@@ -1,0 +1,27 @@
+package hayride:ai@0.0.61;
+
+interface types {
+    use hayride:mcp/types@0.0.61.{tool, call-tool-params, call-tool-result};
+
+    enum role {
+        user,
+        assistant,
+        system,
+        tool,
+        unknown
+    }
+
+    variant message-content {
+        none,
+        text(string),
+        blob(list<u8>),
+        tools(list<tool>),
+        tool-input(call-tool-params),
+        tool-output(call-tool-result),
+    }
+
+    record message {
+        role: role,
+        content: list<message-content>,
+    }
+}

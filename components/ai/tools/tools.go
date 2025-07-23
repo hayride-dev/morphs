@@ -1,47 +1,29 @@
 package main
 
 import (
-	"unsafe"
-
-	"github.com/hayride-dev/morphs/components/ai/tools/internal/gen/hayride/mcp/tools"
-	"go.bytecodealliance.org/cm"
+	"github.com/hayride-dev/bindings/go/hayride/mcp/tools"
+	"github.com/hayride-dev/bindings/go/hayride/mcp/tools/export"
+	"github.com/hayride-dev/bindings/go/hayride/types"
 )
 
-type resources struct {
-	tools map[cm.Rep]*noopTools
-}
-
-var resourceTable = &resources{
-	tools: make(map[cm.Rep]*noopTools),
-}
-
-func init() {
-	tools.Exports.Tools.Constructor = constructor
-	tools.Exports.Tools.CallTool = call
-	tools.Exports.Tools.ListTools = list
-	tools.Exports.Tools.Destructor = destructor
-}
+var _ tools.Tools = (*noopTools)(nil)
 
 type noopTools struct{}
 
-func constructor() tools.Tools {
-	noop := &noopTools{}
-	key := cm.Rep(uintptr(*(*unsafe.Pointer)(unsafe.Pointer(&noop))))
-	v := tools.ToolsResourceNew(key)
-	resourceTable.tools[key] = noop
-	return v
+func (n *noopTools) Call(params types.CallToolParams) (*types.CallToolResult, error) {
+	return &types.CallToolResult{}, nil
 }
 
-func call(self cm.Rep, params tools.CallToolParams) (result cm.Result[tools.CallToolResultShape, tools.CallToolResult, tools.Error]) {
-	return cm.OK[cm.Result[tools.CallToolResultShape, tools.CallToolResult, tools.Error]](tools.CallToolResult{})
+func (n *noopTools) List(cursor string) (*types.ListToolsResult, error) {
+	return &types.ListToolsResult{}, nil
 }
 
-func list(self cm.Rep, cursor string) (result cm.Result[tools.ListToolsResultShape, tools.ListToolsResult, tools.Error]) {
-	return cm.OK[cm.Result[tools.ListToolsResultShape, tools.ListToolsResult, tools.Error]](tools.ListToolsResult{})
+func constructor() (tools.Tools, error) {
+	return &noopTools{}, nil
 }
 
-func destructor(self cm.Rep) {
-	delete(resourceTable.tools, self)
+func init() {
+	export.Tools(constructor)
 }
 
 func main() {}
