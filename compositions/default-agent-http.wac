@@ -14,7 +14,6 @@ let agent = new hayride:default-agent@0.0.1 {
 };
 
 let runner = new hayride:default-runner@0.0.1 {
-  context: context.context,
   agents: agent.agents,
   ...
 };

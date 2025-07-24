@@ -1,4 +1,4 @@
-package main
+package llama3
 
 import (
 	"encoding/json"
@@ -75,6 +75,10 @@ const (
 )
 
 var _ models.Format = (*llama3)(nil)
+
+func Constructor() (models.Format, error) {
+	return &llama3{}, nil
+}
 
 type llama3 struct{}
 
@@ -166,12 +170,14 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 		}
 	}
 
-	return &types.Message{
+	message := &types.Message{
 		Role: types.RoleAssistant,
 		Content: cm.ToList([]types.MessageContent{
 			types.NewMessageContent(types.Text(msg)),
 		}),
-	}, nil
+	}
+
+	return message, nil
 }
 
 func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {

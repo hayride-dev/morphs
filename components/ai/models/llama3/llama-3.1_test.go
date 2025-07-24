@@ -1,4 +1,4 @@
-package main
+package llama3
 
 import (
 	"testing"

@@ -64,9 +64,11 @@ func init() {
 	}
 
 	a, err := agents.New(
-		tools, ctx, format, graphExecutionCtxStream,
+		format, graphExecutionCtxStream,
 		agents.WithName("Helpful Agent"),
 		agents.WithInstruction("You are a helpful assistant. Answer the user's questions to the best of your ability."),
+		agents.WithContext(ctx),
+		agents.WithTools(tools),
 	)
 	if err != nil {
 		log.Fatal(err)
