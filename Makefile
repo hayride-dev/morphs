@@ -25,13 +25,16 @@ register-llama:
 register-inmemory:
 	hayride register --bin ./components/ai/contexts/inmemory.wasm --package hayride:inmemory@0.0.1
 
+register-runner:
+	hayride register --bin ./components/ai/runners/default.wasm --package hayride:default-runner@0.0.1
+
 register-cli:
-	hayride register --bin ./components/ai/runners/cli.wasm --package hayride:cli@0.0.1
+	hayride register --bin ./components/examples/agents/cli.wasm --package hayride:cli@0.0.1
 
 register-http:
-	hayride register --bin ./components/ai/runners/http.wasm --package hayride:http@0.0.1
+	hayride register --bin ./components/examples/agents/http.wasm --package hayride:http@0.0.1
 
-register: register-default-tools register-datetime register-default-agent register-llama register-inmemory register-cli register-http
+register: register-default-tools register-datetime register-default-agent register-llama register-inmemory register-runner register-cli register-http
 
 compose-cli:
 	hayride wac compose --path ./compositions/default-agent-cli.wac --out ./compositions/composed-cli-agent.wasm

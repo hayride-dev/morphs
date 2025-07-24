@@ -13,11 +13,17 @@ let agent = new hayride:default-agent@0.0.1 {
   ...
 };
 
+let runner = new hayride:default-runner@0.0.1 {
+  agents: agent.agents,
+  ...
+};
+
 let http = new hayride:http@0.0.1 {
   context: context.context,
   model: llama.model,
   tools: tools.tools,
   agents: agent.agents,
+  runner: runner.runner,
   ...
 };
 

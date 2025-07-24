@@ -1,10 +1,7 @@
-.PHONY: all gen build
+.PHONY: all build
 
 default: all
 
-all: gen build
-
-gen:
-	wit-bindgen-go generate --world hayride:agents/default --out ./internal/gen ./wit
+all: build
 
 build: ; tinygo build -target wasip2 --wit-package ./wit/ --wit-world default default.go
