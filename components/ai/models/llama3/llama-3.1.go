@@ -143,7 +143,7 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 			}
 
 			input := [][2]string{}
-			if values, ok := result["input"]; ok {
+			if values, ok := result["input"]; ok && values != "" {
 				// Unmarshal into a map
 				var m map[string]string
 				err := json.Unmarshal([]byte(values), &m)
@@ -239,8 +239,25 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 					builder.WriteString(endOfTurn)
 				case "tool-input":
 					c := content.ToolInput()
-					// TODO : support other function call ai
-					builder.WriteString(fmt.Sprintf("<function=%s>%v</function>\n", c.Name, c.Arguments))
+					// Parse arguments into a json format
+					args := make(map[string]string)
+					for _, arg := range c.Arguments.Slice() {
+						if len(arg) != 2 {
+							return nil, fmt.Errorf("invalid tool input argument format: %v", arg)
+						}
+						args[arg[0]] = arg[1]
+					}
+
+					input := ""
+					if len(args) > 0 {
+						jsonArgs, err := json.Marshal(args)
+						if err != nil {
+							return nil, fmt.Errorf("failed to marshal tool input arguments: %v", err)
+						}
+						input = string(jsonArgs)
+					}
+
+					builder.WriteString(fmt.Sprintf("<function=%s>%v</function>\n", c.Name, input))
 					// end turn
 					builder.WriteString(endOfMessage)
 				}
