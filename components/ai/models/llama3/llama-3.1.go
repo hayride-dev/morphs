@@ -315,11 +315,10 @@ func customToolEncode(tools []types.Tool) string {
 
 	result := `
 	# Tool Instructions
-	- Function calls MUST follow the specified format
-	- Required parameters MUST be specified
-	- Only call one function at a time
-	- Put the entire function call reply on one line
+	- Calling a tool is not necessary, use relevant functions only if needed
+	- If you call a function, put the entire function call reply on one line
 	- Only add parameters when the params are specified in the tool schema
+	- When you get a response from a tool, use that information to answer the user query
 
 	You have access to the following functions:
 	{
