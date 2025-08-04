@@ -76,7 +76,7 @@ const (
 
 var _ models.Format = (*llama3)(nil)
 
-func Constructor() (models.Format, error) {
+func Constructor_3_1() (models.Format, error) {
 	return &llama3{}, nil
 }
 

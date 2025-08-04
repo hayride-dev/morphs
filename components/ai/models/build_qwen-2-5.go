@@ -1,4 +1,4 @@
-//go:build qwen
+//go:build qwen_2_5
 
 package main
 
@@ -8,5 +8,5 @@ import (
 )
 
 func build() export.Constructor {
-	return qwen.Constructor
+	return qwen.ConstructorQwen_2_5
 }

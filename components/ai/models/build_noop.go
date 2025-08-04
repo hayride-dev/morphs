@@ -1,4 +1,4 @@
-//go:build !llama3 && !qwen
+//go:build !llama_3_1 && !qwen_2_5 && !qwen_3
 
 package main
 
