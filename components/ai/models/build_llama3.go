@@ -7,6 +7,6 @@ import (
 	"github.com/hayride-dev/morphs/components/ai/models/llama3"
 )
 
-func runtime() export.Constructor {
+func build() export.Constructor {
 	return llama3.Constructor
 }
