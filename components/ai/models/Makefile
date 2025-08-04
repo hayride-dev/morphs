@@ -6,7 +6,7 @@ all: build
 
 test: ; go test
 
-TAGS ?= llama3
+TAGS ?= llama_3_1
 
 OUTPUT ?= llama31.wasm
 

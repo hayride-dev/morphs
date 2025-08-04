@@ -14,35 +14,49 @@ import (
 var (
 	// Regular expression to match tool calls in the format:
 	// <tool_call>\n{"name": "function_name", "arguments": {...}}\n</tool_call>
-	toolCallRegex = regexp.MustCompile(`<tool_call>\s*(\{.*?\})\s*</tool_call>`)
+	qwen3ToolCallRegex = regexp.MustCompile(`<tool_call>\s*(\{.*?\})\s*</tool_call>`)
 )
 
 const (
-	// Qwen 2.5 special tokens
-	imStart = "<|im_start|>"
-	imEnd   = "<|im_end|>"
+	// Qwen 3 special tokens
+	qwen3ImStart = "<|im_start|>"
+	qwen3ImEnd   = "<|im_end|>"
 
 	// Tool-related tokens
-	toolResponse    = "<tool_response>"
-	toolResponseEnd = "</tool_response>"
-	toolCall        = "<tool_call>"
-	toolCallEnd     = "</tool_call>"
+	qwen3ToolResponse    = "<tool_response>"
+	qwen3ToolResponseEnd = "</tool_response>"
+	qwen3ToolCall        = "<tool_call>"
+	qwen3ToolCallEnd     = "</tool_call>"
+
+	// Thinking tokens for reasoning
+	qwen3Think    = "<think>"
+	qwen3ThinkEnd = "</think>"
 )
 
-var _ models.Format = (*qwen25)(nil)
+var _ models.Format = (*qwen3)(nil)
 
-func ConstructorQwen_2_5() (models.Format, error) {
-	return &qwen25{}, nil
+func ConstructorQwen_3() (models.Format, error) {
+	return &qwen3{}, nil
 }
 
-type qwen25 struct{}
+type qwen3 struct{}
 
-func (m *qwen25) Decode(data []byte) (*types.Message, error) {
+func (m *qwen3) Decode(data []byte) (*types.Message, error) {
 	content := string(data)
 
+	// Remove thinking tags if present - these are for internal reasoning
+	if strings.Contains(content, qwen3Think) && strings.Contains(content, qwen3ThinkEnd) {
+		start := strings.Index(content, qwen3Think)
+		end := strings.Index(content, qwen3ThinkEnd) + len(qwen3ThinkEnd)
+		if start != -1 && end != -1 && end > start {
+			content = content[:start] + content[end:]
+			content = strings.TrimSpace(content)
+		}
+	}
+
 	// Check if this is a tool call response
-	if strings.Contains(content, toolCall) {
-		matches := toolCallRegex.FindStringSubmatch(content)
+	if strings.Contains(content, qwen3ToolCall) {
+		matches := qwen3ToolCallRegex.FindStringSubmatch(content)
 		if len(matches) != 2 {
 			return nil, fmt.Errorf("failed to parse tool call, invalid format")
 		}
@@ -100,7 +114,7 @@ func (m *qwen25) Decode(data []byte) (*types.Message, error) {
 	}, nil
 }
 
-func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
+func (m *qwen3) Encode(messages ...types.Message) ([]byte, error) {
 	builder := &strings.Builder{}
 
 	// Track if we have tools available
@@ -121,32 +135,55 @@ func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
 		}
 	}
 
+	// Find the last query index for multi-step tool detection
+	lastQueryIndex := len(messages) - 1
+
+	// Iterate backwards to find the last real user query
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if msg.Role == types.RoleUser {
+			// Check if this is a tool response wrapper
+			isToolResponse := false
+			for _, content := range msg.Content.Slice() {
+				if content.String() == "text" {
+					text := *content.Text()
+					if strings.HasPrefix(text, qwen3ToolResponse) && strings.HasSuffix(text, qwen3ToolResponseEnd) {
+						isToolResponse = true
+						break
+					}
+				}
+			}
+			if !isToolResponse {
+				lastQueryIndex = i
+				break
+			}
+		}
+	}
+
 	// Process messages
 	for i, msg := range messages {
 		switch msg.Role {
 		case types.RoleSystem:
-			builder.WriteString(fmt.Sprintf("%ssystem\n", imStart))
-
-			// Add system content
-			systemContent := ""
-			for _, content := range msg.Content.Slice() {
-				if content.String() == "text" {
-					c := content.Text()
-					systemContent = *c
-					break
-				}
-			}
-
-			// Use default system message if none provided
-			if systemContent == "" {
-				systemContent = "You are Qwen, created by Alibaba Cloud. You are a helpful assistant."
-			}
-
-			builder.WriteString(systemContent)
-
-			// Add tools section if tools are available
+			// Handle tools section first if available
 			if hasTools {
-				builder.WriteString("\n\n# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>")
+				builder.WriteString(fmt.Sprintf("%ssystem\n", qwen3ImStart))
+
+				// Add system content
+				systemContent := ""
+				for _, content := range msg.Content.Slice() {
+					if content.String() == "text" {
+						c := content.Text()
+						systemContent = *c
+						break
+					}
+				}
+
+				if systemContent != "" {
+					builder.WriteString(fmt.Sprintf("%s\n\n", systemContent))
+				}
+
+				// Add tools section
+				builder.WriteString("# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>")
 
 				for _, tool := range tools {
 					toolJSON := map[string]interface{}{
@@ -169,12 +206,21 @@ func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
 				}
 
 				builder.WriteString("\n</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call>")
+				builder.WriteString(fmt.Sprintf("%s\n", qwen3ImEnd))
+			} else {
+				// Regular system message without tools
+				builder.WriteString(fmt.Sprintf("%ssystem\n", qwen3ImStart))
+				for _, content := range msg.Content.Slice() {
+					if content.String() == "text" {
+						c := content.Text()
+						builder.WriteString(*c)
+					}
+				}
+				builder.WriteString(fmt.Sprintf("%s\n", qwen3ImEnd))
 			}
 
-			builder.WriteString(fmt.Sprintf("%s\n", imEnd))
-
 		case types.RoleUser:
-			builder.WriteString(fmt.Sprintf("%suser\n", imStart))
+			builder.WriteString(fmt.Sprintf("%suser\n", qwen3ImStart))
 
 			for _, content := range msg.Content.Slice() {
 				if content.String() == "text" {
@@ -183,10 +229,17 @@ func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
 				}
 			}
 
-			builder.WriteString(fmt.Sprintf("%s\n", imEnd))
+			builder.WriteString(fmt.Sprintf("%s\n", qwen3ImEnd))
 
 		case types.RoleAssistant:
-			builder.WriteString(fmt.Sprintf("%sassistant", imStart))
+			isLastMessage := i == len(messages)-1
+			shouldAddThinking := i > lastQueryIndex && (isLastMessage || !isLastMessage)
+
+			builder.WriteString(fmt.Sprintf("%sassistant", qwen3ImStart))
+
+			if shouldAddThinking {
+				builder.WriteString(fmt.Sprintf("\n%s\n\n%s\n\n", qwen3Think, qwen3ThinkEnd))
+			}
 
 			for _, content := range msg.Content.Slice() {
 				switch content.String() {
@@ -213,19 +266,19 @@ func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
 					}
 
 					toolCallBytes, _ := json.Marshal(toolCallJSON)
-					builder.WriteString(fmt.Sprintf("\n%s\n%s\n%s", toolCall, string(toolCallBytes), toolCallEnd))
+					builder.WriteString(fmt.Sprintf("\n%s\n%s\n%s", qwen3ToolCall, string(toolCallBytes), qwen3ToolCallEnd))
 				}
 			}
 
-			builder.WriteString(fmt.Sprintf("%s\n", imEnd))
+			builder.WriteString(fmt.Sprintf("%s\n", qwen3ImEnd))
 
 		case types.RoleTool:
 			// Check if this is the first tool message or if the previous message was not a tool
 			if i == 0 || messages[i-1].Role != types.RoleTool {
-				builder.WriteString(fmt.Sprintf("%suser", imStart))
+				builder.WriteString(fmt.Sprintf("%suser", qwen3ImStart))
 			}
 
-			builder.WriteString(fmt.Sprintf("\n%s\n", toolResponse))
+			builder.WriteString(fmt.Sprintf("\n%s\n", qwen3ToolResponse))
 
 			for _, content := range msg.Content.Slice() {
 				if content.String() == "tool-output" {
@@ -256,11 +309,11 @@ func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
 				}
 			}
 
-			builder.WriteString(fmt.Sprintf("\n%s", toolResponseEnd))
+			builder.WriteString(fmt.Sprintf("\n%s", qwen3ToolResponseEnd))
 
 			// Check if this is the last tool message or if the next message is not a tool
 			if i == len(messages)-1 || messages[i+1].Role != types.RoleTool {
-				builder.WriteString(fmt.Sprintf("%s\n", imEnd))
+				builder.WriteString(fmt.Sprintf("%s\n", qwen3ImEnd))
 			}
 
 		default:
@@ -270,7 +323,9 @@ func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
 
 	// Add generation prompt if the last message is not from assistant
 	if len(messages) > 0 && messages[len(messages)-1].Role != types.RoleAssistant {
-		builder.WriteString(fmt.Sprintf("%sassistant\n", imStart))
+		builder.WriteString(fmt.Sprintf("%sassistant\n", qwen3ImStart))
+		// Add thinking tags for new responses
+		builder.WriteString(fmt.Sprintf("%s\n\n%s\n\n", qwen3Think, qwen3ThinkEnd))
 	}
 
 	return []byte(builder.String()), nil

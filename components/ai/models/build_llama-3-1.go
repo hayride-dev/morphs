@@ -1,4 +1,4 @@
-//go:build llama3
+//go:build llama_3_1
 
 package main
 
@@ -8,5 +8,5 @@ import (
 )
 
 func build() export.Constructor {
-	return llama3.Constructor
+	return llama3.Constructor_3_1
 }
