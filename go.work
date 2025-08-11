@@ -10,4 +10,5 @@ use (
 	./components/examples/hello-world
 	./components/examples/http/client
 	./components/examples/http/server
+	./components/examples/http/sse
 )
