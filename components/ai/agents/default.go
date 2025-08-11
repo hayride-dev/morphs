@@ -169,7 +169,7 @@ func (a *defaultAgent) Compute(message types.Message) (*types.Message, error) {
 	}
 
 	// Decode Message
-	msg, err := a.format.Decode(text)
+	msg, err := a.format.Decode(text) // Gets us our API Message
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode message: %w", err)
 	}
