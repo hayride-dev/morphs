@@ -1,6 +1,6 @@
 package hayride:runners@0.0.1;
 
 world default {
-    include hayride:wasip2/imports@0.0.61;
-    export hayride:ai/runner@0.0.61;
+    include hayride:wasip2/imports@0.0.62;
+    export hayride:ai/runner@0.0.62;
 }

@@ -5,10 +5,13 @@ use (
 	./components/ai/contexts
 	./components/ai/models
 	./components/ai/runners
-	./components/ai/tools
+	./components/mcp/auth
+	./components/mcp/tools
 	./components/examples/agents
 	./components/examples/hello-world
 	./components/examples/http/client
 	./components/examples/http/server
 	./components/examples/http/sse
+	./components/examples/mcp/http-server
+	./components/util/datetime
 )
