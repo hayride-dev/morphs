@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 
-	"github.com/hayride-dev/bindings/go/hayride/mcp/auth"
 	"github.com/hayride-dev/bindings/go/hayride/mcp/tools"
 	"github.com/hayride-dev/bindings/go/hayride/types"
 	"github.com/hayride-dev/bindings/go/hayride/x/net/http/server/export"
@@ -19,17 +18,20 @@ func init() {
 		panic(fmt.Sprintf("Failed to create tools: %v", err))
 	}
 
-	provider, err := auth.New()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create auth provider: %v", err))
-	}
+	// To include authentication import and add auth provider to the server
+	/*
+		provider, err := auth.New()
+		if err != nil {
+			panic(fmt.Sprintf("Failed to create auth provider: %v", err))
+		}
+	*/
 
 	// Create the MCP server router with the tools and auth provider
 	mux, err := server.NewMCPRouter(
 		server.WithName("MCP Server"),
 		server.WithVersion("0.0.1"),
 		server.WithTools(toolbox),
-		server.WithAuthProvider(provider),
+		// server.WithAuthProvider(provider),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create MCP server: %v", err))

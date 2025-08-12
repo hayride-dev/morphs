@@ -7,11 +7,11 @@ let tools = new hayride:default-tools@0.0.1 {
   ...
 };
 
-let auth = new hayride:mcp-ory-auth@0.0.1 {...};
+// let auth = new hayride:mcp-ory-auth@0.0.1 {...};
 
 let server = new hayride:mcp-http-server@0.0.1 {
   tools: tools.tools,
-  auth: auth.auth,
+  //auth: auth.auth,
   ...
 };
 
