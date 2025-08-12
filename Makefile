@@ -11,10 +11,10 @@ build:
 	done
 
 register-default-tools:
-	hayride register --bin ./components/ai/tools/tools.wasm --package hayride:default-tools@0.0.1
+	hayride register --bin ./components/mcp/tools/tools.wasm --package hayride:default-tools@0.0.1
 
 register-datetime:
-	hayride register --bin ./components/ai/tools/datetime/target/wasm32-wasip2/release/datetime.wasm --package hayride:datetime@0.0.1
+	hayride register --bin ./components/util/datetime/target/wasm32-wasip2/release/datetime.wasm --package hayride:datetime@0.0.1
 
 register-default-agent:
 	hayride register --bin ./components/ai/agents/default.wasm --package hayride:default-agent@0.0.1
@@ -34,7 +34,13 @@ register-cli:
 register-http:
 	hayride register --bin ./components/examples/agents/http.wasm --package hayride:http@0.0.1
 
-register: register-default-tools register-datetime register-default-agent register-llama register-inmemory register-runner register-cli register-http
+register-mcp-server:
+	hayride register --bin ./components/examples/mcp/http-server/mcp-server.wasm --package hayride:mcp-http-server@0.0.1
+
+register-ory-auth:
+	hayride register --bin ./components/mcp/auth/ory-auth.wasm --package hayride:mcp-ory-auth@0.0.1
+
+register: register-default-tools register-datetime register-default-agent register-llama register-inmemory register-runner register-cli register-http register-mcp-server register-ory-auth
 
 compose-cli:
 	hayride wac compose --path ./compositions/default-agent-cli.wac --out ./compositions/composed-cli-agent.wasm
@@ -42,7 +48,10 @@ compose-cli:
 compose-http:
 	hayride wac compose --path ./compositions/default-agent-http.wac --out ./compositions/composed-http-agent.wasm
 
-compose: compose-cli compose-http
+compose-mcp-http-server:
+	hayride wac compose --path ./compositions/mcp-server.wac --out ./compositions/composed-mcp-server.wasm
+
+compose: compose-cli compose-http compose-mcp-http-server
 
 register-cli-agent:
 	hayride register --bin ./compositions/composed-cli-agent.wasm --package hayride:composed-cli-agent@0.0.1
@@ -50,5 +59,7 @@ register-cli-agent:
 register-http-agent:
 	hayride register --bin ./compositions/composed-http-agent.wasm --package hayride:composed-http-agent@0.0.1
 
-register-composed: register-cli-agent register-http-agent
+register-mcp-server-composed:
+	hayride register --bin ./compositions/composed-mcp-server.wasm --package hayride:composed-mcp-server@0.0.1
 
+register-composed: register-cli-agent register-http-agent register-mcp-server-composed

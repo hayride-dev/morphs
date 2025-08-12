@@ -29,7 +29,7 @@ sha256 = "622bd28bbeb43736375dc02bd003fd3a016ff8ee91e14bab488325c6b38bf966"
 sha512 = "5a63c1f36de0c4548e1d2297bdbededb28721cbad94ef7825c469eae29d7451c97e00b4c1d6730ee1ec0c4a5aac922961a2795762d4a0c3bb54e30a391a84bae"
 
 [wasip2]
-url = "https://github.com/hayride-dev/coven/releases/download/v0.0.61/hayride_wasip2_v0.0.61.tar.gz"
-sha256 = "161eae94bea8adc5ae66c3b658a6f73541ec5f34d652517421ffb22cbb226831"
-sha512 = "a1870cc8e7690d44de765245652613a69b6ce3302acd5f1243e49cf91f4b89f166ba063f27f8ece816e99150c81bf844ba5de75d4c98bb6e47094a587bc3812e"
+url = "https://github.com/hayride-dev/coven/releases/download/v0.0.62/hayride_wasip2_v0.0.62.tar.gz"
+sha256 = "4abe113037539538b82df17954783f01c14c95499fdf44ec623cd8dd4ccfa10c"
+sha512 = "b59eb0ce448f143a0172234ba11966b638bc775d8a5f14dc3f74c4039e664c7d826659c8b8d4787cfcb7db8ee57a2f4e3b5a878d40b99c4c92416efbbd698093"
 deps = ["cli", "clocks", "filesystem", "io", "random", "sockets"]
