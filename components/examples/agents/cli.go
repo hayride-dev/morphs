@@ -72,12 +72,12 @@ func main() {
 	runner := runner.New()
 	writer := cli.GetStdout(true)
 
-	fmt.Println("What can I help with?")
+	writer.Write([]byte("What can I help with?\n"))
 	for {
 		input, _ := reader.ReadString('\n')
 		prompt := strings.TrimSpace(input)
 		if strings.ToLower(prompt) == "exit" {
-			fmt.Println("Goodbye!")
+			writer.Write([]byte("Goodbye!\n"))
 			break
 		}
 
@@ -90,17 +90,17 @@ func main() {
 
 		messages, err := runner.Invoke(msg, a, format, graphExecutionCtxStream, writer)
 		if err != nil {
-			fmt.Println("error invoking agent:", err)
+			writer.Write([]byte(fmt.Sprintf("error invoking agent: %v\n", err)))
 			os.Exit(1)
 		}
 
-		bytes, err := json.Marshal(messages)
+		bytes, err := json.MarshalIndent(messages, "", "  ")
 		if err != nil {
 			fmt.Println("error marshaling messages:", err)
 			os.Exit(1)
 		}
 
-		fmt.Println("full messages:", string(bytes))
-		fmt.Println("\nWhat else can I help with? (type 'exit' to quit)")
+		writer.Write([]byte(fmt.Sprintf("full messages: %s\n", string(bytes))))
+		writer.Write([]byte("\nWhat else can I help with? (type 'exit' to quit)\n"))
 	}
 }

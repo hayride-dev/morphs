@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/hayride-dev/bindings/go/hayride/ai/agents"
 	"github.com/hayride-dev/bindings/go/hayride/ai/graph"
@@ -65,14 +66,15 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 		//
 		text := make([]byte, 0)
 		part := make([]byte, 256)
+		var lastDecodedLength int = 0 // Track how much we've already processed
 		for {
-			len, err := ts.Read(part)
-			if len == 0 || err == io.EOF {
+			bytesRead, err := ts.Read(part)
+			if bytesRead == 0 || err == io.EOF {
 				break
 			} else if err != nil {
 				return nil, fmt.Errorf("failed to read from tensor stream: %w", err)
 			}
-			text = append(text, part[:len]...)
+			text = append(text, part[:bytesRead]...)
 			// Decode Message
 			msg, err := format.Decode(text) // Gets us our API Message
 			if err != nil {
@@ -82,16 +84,68 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 				}
 				return nil, err
 			}
-			agent.Push(*msg)
-			// Add the message to the messages list
-			messages = append(messages, *msg)
-			// write the message bytes as json to the writer if provided ( i.e stream )
-			if w != nil {
-				b, err := json.Marshal(msg)
-				if err != nil {
-					return nil, fmt.Errorf("failed to marshal message: %w", err)
+
+			// Only process if we have new content
+			if len(text) > lastDecodedLength {
+				// Extract only the new text content for streaming
+				if msg.Role == types.RoleAssistant && len(msg.Content.Slice()) > 0 {
+					for _, content := range msg.Content.Slice() {
+						if content.String() == "text" {
+							fullText := *content.Text()
+							// Extract only the new part
+							if len(fullText) > lastDecodedLength {
+								newText := fullText[lastDecodedLength:]
+								if strings.TrimSpace(newText) != "" {
+									// Create a message with just the delta
+									deltaMsg := types.Message{
+										Role: types.RoleAssistant,
+										Content: cm.ToList([]types.MessageContent{
+											types.NewMessageContent(types.Text(newText)),
+										}),
+									}
+									agent.Push(deltaMsg)
+									messages = append(messages, deltaMsg)
+
+									// write the delta message as json to the writer if provided
+									if w != nil {
+										b, err := json.Marshal(deltaMsg)
+										if err != nil {
+											return nil, fmt.Errorf("failed to marshal message: %w", err)
+										}
+										w.Write(b)
+									}
+								}
+								lastDecodedLength = len(fullText)
+							}
+						} else {
+							// For non-text content (like tool calls), send the complete message
+							agent.Push(*msg)
+							messages = append(messages, *msg)
+
+							if w != nil {
+								b, err := json.Marshal(msg)
+								if err != nil {
+									return nil, fmt.Errorf("failed to marshal message: %w", err)
+								}
+								w.Write(b)
+							}
+							lastDecodedLength = len(text)
+						}
+					}
+				} else {
+					// For non-assistant messages, send complete message
+					agent.Push(*msg)
+					messages = append(messages, *msg)
+
+					if w != nil {
+						b, err := json.Marshal(msg)
+						if err != nil {
+							return nil, fmt.Errorf("failed to marshal message: %w", err)
+						}
+						w.Write(b)
+					}
+					lastDecodedLength = len(text)
 				}
-				w.Write(b)
 			}
 
 			// check for tool call

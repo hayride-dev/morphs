@@ -82,285 +82,318 @@ func Constructor_3_1() (models.Format, error) {
 
 type llama3 struct{}
 
+// Helper function to check if text ends with a complete sentence
+func (m *llama3) endsWithCompleteSentence(text string) bool {
+	text = strings.TrimSpace(text)
+	if len(text) == 0 {
+		return false
+	}
+
+	// Check for sentence-ending punctuation
+	lastChar := text[len(text)-1]
+	return lastChar == '.' || lastChar == '!' || lastChar == '?' || lastChar == ':' || lastChar == ';'
+}
+
+// Helper function to check if text appears to be mid-word
+func (m *llama3) isMidWord(text string) bool {
+	text = strings.TrimSpace(text)
+	if len(text) == 0 {
+		return false
+	}
+
+	// If text ends with a letter or digit (not punctuation/whitespace), it might be mid-word
+	lastChar := text[len(text)-1]
+	return (lastChar >= 'a' && lastChar <= 'z') ||
+		(lastChar >= 'A' && lastChar <= 'Z') ||
+		(lastChar >= '0' && lastChar <= '9')
+}
+
 func (m *llama3) Decode(data []byte) (*types.Message, error) {
-	msg := string(data)
+	text := string(data)
 
-	// Remove begin/end of text tokens if present (model may include these)
-	msg = strings.TrimPrefix(msg, beginOfText)
-	msg = strings.TrimSuffix(msg, endOfText)
-	msg = strings.TrimSpace(msg)
-
-	// Check for incomplete messages - if we have header start but no end, or no content after header
-	if strings.Contains(msg, startHeaderId) {
-		// Count header starts vs header ends to detect incomplete messages
-		headerStarts := strings.Count(msg, startHeaderId)
-		headerEnds := strings.Count(msg, endHeaderId)
-
-		// If we have more starts than ends, we have an incomplete header
-		if headerStarts > headerEnds {
-			return nil, &models.PartialDecodeError{
-				Data: "incomplete message header detected",
-			}
-		}
-
-		// Check if the last header segment is incomplete (no end token)
-		lastHeaderStart := strings.LastIndex(msg, startHeaderId)
-		if lastHeaderStart != -1 {
-			afterLastStart := msg[lastHeaderStart:]
-			if !strings.Contains(afterLastStart, endHeaderId) {
-				return nil, &models.PartialDecodeError{
-					Data: "incomplete message header detected",
-				}
-			}
-
-			// Check if content after last header is incomplete (no end tokens)
-			lastHeaderEnd := strings.LastIndex(msg, endHeaderId)
-			if lastHeaderEnd != -1 {
-				afterLastHeader := msg[lastHeaderEnd+len(endHeaderId):]
-				// CRITICAL: Always require end tokens for streaming messages
-				if strings.TrimSpace(afterLastHeader) != "" &&
-					!strings.Contains(afterLastHeader, endOfTurn) &&
-					!strings.Contains(afterLastHeader, endOfMessage) {
-					return nil, &models.PartialDecodeError{
-						Data: "incomplete message content detected - missing end token",
-					}
-				}
-			}
-		}
+	// If we don't have any content, return partial decode error
+	if len(strings.TrimSpace(text)) == 0 {
+		return nil, &models.PartialDecodeError{}
 	}
 
-	// Split by header tokens to get individual message segments
-	segments := strings.Split(msg, startHeaderId)
+	// Check if we have a complete message structure
+	// Look for header patterns to determine message structure
+	if !strings.Contains(text, startHeaderId) {
+		// Raw text without headers - could be streaming assistant response
+		if strings.TrimSpace(text) != "" {
+			trimmedText := strings.TrimSpace(text)
 
-	var messages []*types.Message
-
-	for _, segment := range segments {
-		if strings.TrimSpace(segment) == "" {
-			continue
-		}
-
-		// Find the role and content
-		if !strings.Contains(segment, endHeaderId) {
-			continue
-		}
-
-		parts := strings.SplitN(segment, endHeaderId, 2)
-		if len(parts) != 2 {
-			continue
-		}
-
-		role := strings.TrimSpace(parts[0])
-		content := strings.TrimSpace(parts[1])
-
-		// Remove end tokens
-		content = strings.TrimSuffix(content, endOfTurn)
-		content = strings.TrimSuffix(content, endOfMessage)
-		content = strings.TrimSpace(content)
-
-		switch role {
-		case assistant:
-			// Check if this is a function call
-			if strings.Contains(content, "<function=") {
-				matches := customFunc.FindStringSubmatch(content)
-				if len(matches) > 0 {
-					result := make(map[string]string)
-					subexpNames := customFunc.SubexpNames()
-					for i, name := range subexpNames {
-						if i > 0 && name != "" && i < len(matches) && i < len(subexpNames) {
-							result[name] = matches[i]
-						}
-					}
-
-					input := [][2]string{}
-					if values, ok := result["input"]; ok && values != "" {
-						var m map[string]string
-						err := json.Unmarshal([]byte(values), &m)
-						if err != nil {
-							return nil, fmt.Errorf("failed to parse input parameters: %v", err)
-						}
-
-						for k, v := range m {
-							input = append(input, [2]string{k, v})
-						}
-					}
-
-					messages = append(messages, &types.Message{
-						Role: types.RoleAssistant,
-						Content: cm.ToList([]types.MessageContent{
-							types.NewMessageContent(types.CallToolParams{
-								Name:      result["name"],
-								Arguments: cm.ToList(input),
-							}),
-						}),
-					})
-					continue
-				}
+			// Check if this is a function call even without headers
+			functionMatches := customFunc.FindAllStringSubmatch(trimmedText, -1)
+			if len(functionMatches) > 0 {
+				// Parse as function call
+				return m.parseFunctionCallContent(trimmedText)
 			}
 
-			// Check for legacy python tag format (for backward compatibility)
-			if strings.Contains(content, pythonTag) {
-				content = strings.TrimPrefix(content, pythonTag)
-				content = strings.TrimSuffix(content, endOfMessage)
-
-				matches := parseFunc.FindStringSubmatch(strings.TrimSpace(content))
-				if len(matches) == 3 {
-					name := matches[1]
-					argsString := matches[2]
-
-					paramsList := parseFuncParams.FindAllString(argsString, -1)
-					var args [][2]string
-					for _, param := range paramsList {
-						paramParts := strings.SplitN(param, "=", 2)
-						if len(paramParts) == 2 {
-							paramKey := strings.TrimSpace(paramParts[0])
-							paramKey = strings.Trim(paramKey, "'\"")
-
-							paramValue := strings.TrimSpace(paramParts[1])
-							paramValue = strings.Trim(paramValue, "'\"")
-
-							args = append(args, [2]string{paramKey, paramValue})
-						}
-					}
-
-					messages = append(messages, &types.Message{
-						Role: types.RoleAssistant,
-						Content: cm.ToList([]types.MessageContent{
-							types.NewMessageContent(types.CallToolParams{
-								Name:      name,
-								Arguments: cm.ToList(args),
-							}),
-						}),
-					})
-					continue
-				}
+			// For plain text, try to build complete sentences
+			// If text doesn't end with complete sentence and appears to be mid-word/sentence,
+			// return partial decode error to get more data
+			if !m.endsWithCompleteSentence(trimmedText) &&
+				(m.isMidWord(trimmedText) || len(trimmedText) < 10) {
+				return nil, &models.PartialDecodeError{}
 			}
 
-			// Regular text content
-			if content != "" {
-				messages = append(messages, &types.Message{
-					Role: types.RoleAssistant,
-					Content: cm.ToList([]types.MessageContent{
-						types.NewMessageContent(types.Text(content)),
-					}),
-				})
-			}
-
-		case tool: // ipython role
-			if content != "" {
-				messages = append(messages, &types.Message{
-					Role: types.RoleTool,
-					Content: cm.ToList([]types.MessageContent{
-						types.NewMessageContent(types.Text(content)),
-					}),
-				})
-			}
-
-		case user:
-			if content != "" {
-				messages = append(messages, &types.Message{
-					Role: types.RoleUser,
-					Content: cm.ToList([]types.MessageContent{
-						types.NewMessageContent(types.Text(content)),
-					}),
-				})
-			}
-
-		case system:
-			if content != "" {
-				messages = append(messages, &types.Message{
-					Role: types.RoleSystem,
-					Content: cm.ToList([]types.MessageContent{
-						types.NewMessageContent(types.Text(content)),
-					}),
-				})
-			}
-		}
-	}
-
-	// Return the last assistant message or the most relevant message
-	// Based on your example, we want to return the last assistant message
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == types.RoleAssistant {
-			return messages[i], nil
-		}
-	}
-
-	// If no assistant message found, return the last message
-	if len(messages) > 0 {
-		return messages[len(messages)-1], nil
-	}
-
-	// Fallback: if no header structure found, treat as legacy format
-	// Check for function call without headers
-	if strings.Contains(msg, "<function=") {
-		matches := customFunc.FindStringSubmatch(msg)
-		if len(matches) > 0 {
-			result := make(map[string]string)
-			subexpNames := customFunc.SubexpNames()
-			for i, name := range subexpNames {
-				if i > 0 && name != "" && i < len(matches) && i < len(subexpNames) {
-					result[name] = matches[i]
-				}
-			}
-
-			input := [][2]string{}
-			if values, ok := result["input"]; ok && values != "" {
-				var m map[string]string
-				err := json.Unmarshal([]byte(values), &m)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse input parameters: %v", err)
-				}
-
-				for k, v := range m {
-					input = append(input, [2]string{k, v})
-				}
+			// Return as partial assistant message for streaming
+			content := []types.MessageContent{
+				types.NewMessageContent(types.Text(trimmedText)),
 			}
 
 			return &types.Message{
-				Role: types.RoleAssistant,
-				Content: cm.ToList([]types.MessageContent{
-					types.NewMessageContent(types.CallToolParams{
-						Name:      result["name"],
-						Arguments: cm.ToList(input),
-					}),
-				}),
+				Role:    types.RoleAssistant,
+				Content: cm.ToList(content),
 			}, nil
 		}
+
+		return nil, &models.PartialDecodeError{}
 	}
 
-	// If we reach here and have no messages, check if the input looks like a partial decode
-	if strings.TrimSpace(msg) == "" {
-		return nil, &models.PartialDecodeError{
-			Data: "empty or whitespace-only input",
+	// Parse structured message with headers
+	return m.parseStructuredMessage(text)
+}
+
+func (m *llama3) parseFunctionCallContent(content string) (*types.Message, error) {
+	var messageContents []types.MessageContent
+
+	functionMatches := customFunc.FindAllStringSubmatch(content, -1)
+	for _, match := range functionMatches {
+		if len(match) < 3 {
+			continue
 		}
-	}
 
-	// Check if input looks like it's in the middle of being generated
-	if len(msg) < 5 || strings.HasSuffix(msg, "<") {
-		return nil, &models.PartialDecodeError{
-			Data: "input appears to be incomplete",
+		functionName := match[1]
+		jsonInput := match[2]
+
+		// Parse JSON input into arguments
+		var args map[string]interface{}
+		if jsonInput != "" {
+			if err := json.Unmarshal([]byte(jsonInput), &args); err != nil {
+				return nil, fmt.Errorf("invalid function call JSON: %v", err)
+			}
 		}
-	}
 
-	// For content without headers (legacy fallback), we should be very conservative
-	// In streaming scenarios, raw text without proper Llama 3.1 headers is almost always incomplete
-	if !strings.Contains(msg, startHeaderId) {
-		// For streaming scenarios, be extremely conservative
-		// Raw text without headers should almost always be treated as partial
-		// This is because in a streaming context, raw text is virtually always incomplete
-		// until the model outputs proper end tokens
-		return nil, &models.PartialDecodeError{
-			Data: "raw text without headers detected - likely streaming incomplete content",
+		// Convert to tool call format using CallToolParams
+		var arguments [][2]string
+		for key, value := range args {
+			valueStr := fmt.Sprintf("%v", value)
+			arguments = append(arguments, [2]string{key, valueStr})
 		}
+
+		toolCall := types.CallToolParams{
+			Name:      functionName,
+			Arguments: cm.ToList(arguments),
+		}
+
+		messageContents = append(messageContents, types.NewMessageContent(toolCall))
 	}
 
-	// Final fallback to treating the entire input as text
-	// This should only be reached for legacy content or very simple complete messages
+	if len(messageContents) == 0 {
+		return nil, &models.PartialDecodeError{}
+	}
+
 	return &types.Message{
-		Role: types.RoleAssistant,
-		Content: cm.ToList([]types.MessageContent{
-			types.NewMessageContent(types.Text(string(data))),
-		}),
+		Role:    types.RoleAssistant,
+		Content: cm.ToList(messageContents),
+	}, nil
+}
+
+func (m *llama3) parseStructuredMessage(text string) (*types.Message, error) {
+	// Find the last complete message in the text
+	headerPattern := regexp.MustCompile(startHeaderId + `([^<]+)` + endHeaderId)
+	headerMatches := headerPattern.FindAllStringSubmatch(text, -1)
+
+	if len(headerMatches) == 0 {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	// Get the last header match to find the current message being constructed
+	lastHeader := headerMatches[len(headerMatches)-1]
+	if len(lastHeader) < 2 {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	role := strings.TrimSpace(lastHeader[1])
+
+	// Find the content after the last header
+	lastHeaderStart := strings.LastIndex(text, lastHeader[0])
+	if lastHeaderStart == -1 {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	// Extract content after the header
+	contentStart := lastHeaderStart + len(lastHeader[0])
+	if contentStart >= len(text) {
+		// Header exists but no content yet
+		return nil, &models.PartialDecodeError{}
+	}
+
+	content := text[contentStart:]
+
+	// Check for end tokens to determine if message is complete
+	hasEndToken := strings.Contains(content, endOfTurn) ||
+		strings.Contains(content, endOfMessage) ||
+		strings.Contains(content, endOfText)
+
+	// Parse based on role
+	switch role {
+	case assistant:
+		return m.parseAssistantMessage(content, hasEndToken)
+	case system:
+		return m.parseSystemMessage(content, hasEndToken)
+	case user:
+		return m.parseUserMessage(content, hasEndToken)
+	case tool:
+		return m.parseToolMessage(content, hasEndToken)
+	default:
+		return nil, &models.PartialDecodeError{}
+	}
+}
+
+func (m *llama3) parseAssistantMessage(content string, hasEndToken bool) (*types.Message, error) {
+	// Clean content of end tokens for processing
+	cleanContent := content
+	cleanContent = strings.Replace(cleanContent, endOfTurn, "", -1)
+	cleanContent = strings.Replace(cleanContent, endOfMessage, "", -1)
+	cleanContent = strings.Replace(cleanContent, endOfText, "", -1)
+	cleanContent = strings.TrimSpace(cleanContent)
+
+	var messageContents []types.MessageContent
+
+	// Check for function calls using the custom function pattern
+	functionMatches := customFunc.FindAllStringSubmatch(cleanContent, -1)
+
+	if len(functionMatches) > 0 {
+		// This is a function call message
+		for _, match := range functionMatches {
+			if len(match) < 3 {
+				continue
+			}
+
+			functionName := match[1]
+			jsonInput := match[2]
+
+			// Parse JSON input into arguments
+			var args map[string]interface{}
+			if jsonInput != "" {
+				if err := json.Unmarshal([]byte(jsonInput), &args); err != nil {
+					// If we can't parse JSON and don't have end token, this might be partial
+					if !hasEndToken {
+						return nil, &models.PartialDecodeError{}
+					}
+					// If we have end token but invalid JSON, treat as error
+					return nil, fmt.Errorf("invalid function call JSON: %v", err)
+				}
+			}
+
+			// Convert to tool call format using CallToolParams
+			var arguments [][2]string
+			for key, value := range args {
+				valueStr := fmt.Sprintf("%v", value)
+				arguments = append(arguments, [2]string{key, valueStr})
+			}
+
+			toolCall := types.CallToolParams{
+				Name:      functionName,
+				Arguments: cm.ToList(arguments),
+			}
+
+			messageContents = append(messageContents, types.NewMessageContent(toolCall))
+		}
+
+		// For function calls, we need the end of message token to be complete
+		if !strings.Contains(content, endOfMessage) && !hasEndToken {
+			return nil, &models.PartialDecodeError{}
+		}
+	} else {
+		// This is a text response
+		if cleanContent == "" {
+			// Empty content, might be starting to generate
+			if !hasEndToken {
+				return nil, &models.PartialDecodeError{}
+			}
+		} else {
+			// For text responses without end tokens, try to build complete sentences
+			if !hasEndToken && !m.endsWithCompleteSentence(cleanContent) &&
+				(m.isMidWord(cleanContent) || len(cleanContent) < 10) {
+				return nil, &models.PartialDecodeError{}
+			}
+		}
+
+		// For text responses, we can stream partial content
+		if cleanContent != "" {
+			messageContents = append(messageContents, types.NewMessageContent(types.Text(cleanContent)))
+		}
+	}
+
+	if len(messageContents) == 0 {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	return &types.Message{
+		Role:    types.RoleAssistant,
+		Content: cm.ToList(messageContents),
+	}, nil
+}
+
+func (m *llama3) parseSystemMessage(content string, hasEndToken bool) (*types.Message, error) {
+	// Clean content of end tokens
+	cleanContent := strings.Replace(content, endOfTurn, "", -1)
+	cleanContent = strings.TrimSpace(cleanContent)
+
+	if cleanContent == "" && !hasEndToken {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	messageContents := []types.MessageContent{
+		types.NewMessageContent(types.Text(cleanContent)),
+	}
+
+	return &types.Message{
+		Role:    types.RoleSystem,
+		Content: cm.ToList(messageContents),
+	}, nil
+}
+
+func (m *llama3) parseUserMessage(content string, hasEndToken bool) (*types.Message, error) {
+	// Clean content of end tokens
+	cleanContent := strings.Replace(content, endOfTurn, "", -1)
+	cleanContent = strings.TrimSpace(cleanContent)
+
+	if cleanContent == "" && !hasEndToken {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	messageContents := []types.MessageContent{
+		types.NewMessageContent(types.Text(cleanContent)),
+	}
+
+	return &types.Message{
+		Role:    types.RoleUser,
+		Content: cm.ToList(messageContents),
+	}, nil
+}
+
+func (m *llama3) parseToolMessage(content string, hasEndToken bool) (*types.Message, error) {
+	// Clean content of end tokens
+	cleanContent := strings.Replace(content, endOfTurn, "", -1)
+	cleanContent = strings.TrimSpace(cleanContent)
+
+	if cleanContent == "" && !hasEndToken {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	// Tool messages are typically just text content
+	messageContents := []types.MessageContent{
+		types.NewMessageContent(types.Text(cleanContent)),
+	}
+
+	return &types.Message{
+		Role:    types.RoleTool,
+		Content: cm.ToList(messageContents),
 	}, nil
 }
 
