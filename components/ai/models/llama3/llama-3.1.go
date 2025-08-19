@@ -119,18 +119,13 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 			lastHeaderEnd := strings.LastIndex(msg, endHeaderId)
 			if lastHeaderEnd != -1 {
 				afterLastHeader := msg[lastHeaderEnd+len(endHeaderId):]
-				// If there's content but no end tokens, it might be incomplete
+				// CRITICAL: Always require end tokens for streaming messages
 				if strings.TrimSpace(afterLastHeader) != "" &&
 					!strings.Contains(afterLastHeader, endOfTurn) &&
 					!strings.Contains(afterLastHeader, endOfMessage) {
-					// Check if this looks like it's in the middle of generating content
-					if len(strings.TrimSpace(afterLastHeader)) < 10 ||
-						strings.HasSuffix(strings.TrimSpace(afterLastHeader), "<") ||
-						strings.HasSuffix(strings.TrimSpace(afterLastHeader), "<function") {
-						return nil, &models.PartialDecodeError{
-							Code: 4,
-							Data: "incomplete message content detected",
-						}
+					return nil, &models.PartialDecodeError{
+						Code: 4,
+						Data: "incomplete message content detected - missing end token",
 					}
 				}
 			}
@@ -350,7 +345,24 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 		}
 	}
 
+	// For content without headers (legacy fallback), we should be very conservative
+	// Only return a message if it looks complete (no streaming artifacts)
+	// This should only be used for very simple cases or complete legacy content
+	if !strings.Contains(msg, startHeaderId) {
+		// Check if this looks like incomplete streaming content
+		trimmed := strings.TrimSpace(msg)
+		if len(trimmed) < 3 ||
+			strings.HasSuffix(trimmed, " ") || // ends with space (likely streaming)
+			!strings.ContainsAny(trimmed, ".!?") { // no sentence ending punctuation
+			return nil, &models.PartialDecodeError{
+				Code: 4,
+				Data: "content appears to be incomplete - no proper sentence ending",
+			}
+		}
+	}
+
 	// Final fallback to treating the entire input as text
+	// This should only be reached for legacy content or very simple complete messages
 	return &types.Message{
 		Role: types.RoleAssistant,
 		Content: cm.ToList([]types.MessageContent{
