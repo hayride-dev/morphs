@@ -85,6 +85,11 @@ type llama3 struct{}
 func (m *llama3) Decode(data []byte) (*types.Message, error) {
 	msg := string(data)
 
+	// Remove begin/end of text tokens if present (model may include these)
+	msg = strings.TrimPrefix(msg, beginOfText)
+	msg = strings.TrimSuffix(msg, endOfText)
+	msg = strings.TrimSpace(msg)
+
 	// Split by header tokens to get individual message segments
 	segments := strings.Split(msg, startHeaderId)
 
@@ -293,9 +298,6 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 
 func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 	builder := &strings.Builder{}
-
-	// Add begin of text token at the start
-	builder.WriteString(beginOfText)
 
 	for i, msg := range messages {
 		switch msg.Role {
