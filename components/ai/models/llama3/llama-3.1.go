@@ -84,67 +84,181 @@ type llama3 struct{}
 
 func (m *llama3) Decode(data []byte) (*types.Message, error) {
 	msg := string(data)
-	if strings.Contains(msg, pythonTag) {
-		// remove python tags
-		content := strings.TrimPrefix(msg, pythonTag)
-		content = strings.TrimSuffix(content, endOfMessage)
 
-		matches := parseFunc.FindStringSubmatch(strings.TrimSpace(content))
-		if len(matches) != 3 {
-			return nil, fmt.Errorf("failed to parse assistant message, invalid function formation")
+	// Split by header tokens to get individual message segments
+	segments := strings.Split(msg, startHeaderId)
+
+	var messages []*types.Message
+
+	for _, segment := range segments {
+		if strings.TrimSpace(segment) == "" {
+			continue
 		}
 
-		name := matches[0]
-		argsString := matches[1]
+		// Find the role and content
+		if !strings.Contains(segment, endHeaderId) {
+			continue
+		}
 
-		paramsList := parseFuncParams.FindAllString(argsString, -1)
-		var args [][2]string
-		for _, param := range paramsList {
-			// Split each parameter into name and value
-			paramParts := strings.SplitN(param, "=", 2)
-			if len(paramParts) != 2 {
-				return nil, fmt.Errorf("parameter format is invalid: %s", param)
+		parts := strings.SplitN(segment, endHeaderId, 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		role := strings.TrimSpace(parts[0])
+		content := strings.TrimSpace(parts[1])
+
+		// Remove end tokens
+		content = strings.TrimSuffix(content, endOfTurn)
+		content = strings.TrimSuffix(content, endOfMessage)
+		content = strings.TrimSpace(content)
+
+		switch role {
+		case assistant:
+			// Check if this is a function call
+			if strings.Contains(content, "<function=") {
+				matches := customFunc.FindStringSubmatch(content)
+				if len(matches) >= 3 {
+					result := make(map[string]string)
+					for i, name := range customFunc.SubexpNames() {
+						if i > 0 && name != "" && i < len(matches) {
+							result[name] = matches[i]
+						}
+					}
+
+					input := [][2]string{}
+					if values, ok := result["input"]; ok && values != "" {
+						var m map[string]string
+						err := json.Unmarshal([]byte(values), &m)
+						if err != nil {
+							return nil, fmt.Errorf("failed to parse input parameters: %v", err)
+						}
+
+						for k, v := range m {
+							input = append(input, [2]string{k, v})
+						}
+					}
+
+					messages = append(messages, &types.Message{
+						Role: types.RoleAssistant,
+						Content: cm.ToList([]types.MessageContent{
+							types.NewMessageContent(types.CallToolParams{
+								Name:      result["name"],
+								Arguments: cm.ToList(input),
+							}),
+						}),
+					})
+					continue
+				}
 			}
 
-			// Trim spaces and quotes from key
-			paramKey := strings.TrimSpace(paramParts[0])
-			paramKey = strings.Trim(paramKey, "'")
-			paramKey = strings.Trim(paramKey, "\"")
+			// Check for legacy python tag format (for backward compatibility)
+			if strings.Contains(content, pythonTag) {
+				content = strings.TrimPrefix(content, pythonTag)
+				content = strings.TrimSuffix(content, endOfMessage)
 
-			// Trim spaces and quotes from value
-			paramValue := strings.TrimSpace(paramParts[1])
-			paramValue = strings.Trim(paramValue, "'")
-			paramValue = strings.Trim(paramValue, "\"")
+				matches := parseFunc.FindStringSubmatch(strings.TrimSpace(content))
+				if len(matches) == 3 {
+					name := matches[1]
+					argsString := matches[2]
 
-			args = append(args, [2]string{paramKey, paramValue})
+					paramsList := parseFuncParams.FindAllString(argsString, -1)
+					var args [][2]string
+					for _, param := range paramsList {
+						paramParts := strings.SplitN(param, "=", 2)
+						if len(paramParts) == 2 {
+							paramKey := strings.TrimSpace(paramParts[0])
+							paramKey = strings.Trim(paramKey, "'\"")
+
+							paramValue := strings.TrimSpace(paramParts[1])
+							paramValue = strings.Trim(paramValue, "'\"")
+
+							args = append(args, [2]string{paramKey, paramValue})
+						}
+					}
+
+					messages = append(messages, &types.Message{
+						Role: types.RoleAssistant,
+						Content: cm.ToList([]types.MessageContent{
+							types.NewMessageContent(types.CallToolParams{
+								Name:      name,
+								Arguments: cm.ToList(args),
+							}),
+						}),
+					})
+					continue
+				}
+			}
+
+			// Regular text content
+			if content != "" {
+				messages = append(messages, &types.Message{
+					Role: types.RoleAssistant,
+					Content: cm.ToList([]types.MessageContent{
+						types.NewMessageContent(types.Text(content)),
+					}),
+				})
+			}
+
+		case tool: // ipython role
+			if content != "" {
+				messages = append(messages, &types.Message{
+					Role: types.RoleTool,
+					Content: cm.ToList([]types.MessageContent{
+						types.NewMessageContent(types.Text(content)),
+					}),
+				})
+			}
+
+		case user:
+			if content != "" {
+				messages = append(messages, &types.Message{
+					Role: types.RoleUser,
+					Content: cm.ToList([]types.MessageContent{
+						types.NewMessageContent(types.Text(content)),
+					}),
+				})
+			}
+
+		case system:
+			if content != "" {
+				messages = append(messages, &types.Message{
+					Role: types.RoleSystem,
+					Content: cm.ToList([]types.MessageContent{
+						types.NewMessageContent(types.Text(content)),
+					}),
+				})
+			}
 		}
-		return &types.Message{
-			Role: types.RoleAssistant,
-			Content: cm.ToList([]types.MessageContent{
-				types.NewMessageContent(types.CallToolParams{
-					Name:      name,
-					Arguments: cm.ToList(args),
-				}),
-			}),
-		}, nil
-	} else if strings.Contains(msg, "<function") {
-		// Custom function definition
+	}
+
+	// Return the last assistant message or the most relevant message
+	// Based on your example, we want to return the last assistant message
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == types.RoleAssistant {
+			return messages[i], nil
+		}
+	}
+
+	// If no assistant message found, return the last message
+	if len(messages) > 0 {
+		return messages[len(messages)-1], nil
+	}
+
+	// Fallback: if no header structure found, treat as legacy format
+	// Check for function call without headers
+	if strings.Contains(msg, "<function=") {
 		matches := customFunc.FindStringSubmatch(msg)
-		if len(matches) != 3 {
-			return nil, fmt.Errorf("failed to parse assistant message, invalid function formation")
-		}
-
-		if matches != nil {
+		if len(matches) >= 3 {
 			result := make(map[string]string)
 			for i, name := range customFunc.SubexpNames() {
-				if i > 0 && name != "" {
+				if i > 0 && name != "" && i < len(matches) {
 					result[name] = matches[i]
 				}
 			}
 
 			input := [][2]string{}
 			if values, ok := result["input"]; ok && values != "" {
-				// Unmarshal into a map
 				var m map[string]string
 				err := json.Unmarshal([]byte(values), &m)
 				if err != nil {
@@ -165,35 +279,34 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 					}),
 				}),
 			}, nil
-		} else {
-			return nil, fmt.Errorf("failed to parse assistant message, invalid function formation")
 		}
 	}
 
-	message := &types.Message{
+	// Final fallback to treating the entire input as text
+	return &types.Message{
 		Role: types.RoleAssistant,
 		Content: cm.ToList([]types.MessageContent{
-			types.NewMessageContent(types.Text(msg)),
+			types.NewMessageContent(types.Text(string(data))),
 		}),
-	}
-
-	return message, nil
+	}, nil
 }
 
 func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 	builder := &strings.Builder{}
-	last := len(messages) - 1
+
+	// Add begin of text token at the start
+	builder.WriteString(beginOfText)
+
 	for i, msg := range messages {
-		//builder.WriteString("<|begin_of_text|>")
 		switch msg.Role {
 		case types.RoleSystem:
-			// set the system message
+			// System message header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, system, endHeaderId))
-			// add environment token to enable tools by default
-			// TODO :: add ability to disable tool support in system prompt
-			builder.WriteString(fmt.Sprintf("%s\n", env))
 
-			// message body, collect tool schema definitions
+			// Add environment token to enable tools by default
+			builder.WriteString(fmt.Sprintf("%s\n\n", env))
+
+			// Process system message content
 			tools := []types.Tool{}
 			for _, content := range msg.Content.Slice() {
 				switch content.String() {
@@ -206,40 +319,50 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 				}
 			}
 
+			// Add tool definitions if available
 			if len(tools) > 0 {
 				toolString := customToolEncode(tools)
 				if toolString != "" {
-					builder.WriteString(fmt.Sprintf("%s\n", toolString))
+					builder.WriteString(fmt.Sprintf("%s", toolString))
 				}
 			}
 
-			// end system message turn
+			// End system message turn
 			builder.WriteString(endOfTurn)
+
 		case types.RoleUser:
-			// header
+			// User message header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, user, endHeaderId))
-			// message body ( user prompt )
+
+			// Process user message content
 			for _, content := range msg.Content.Slice() {
 				if content.String() == "text" {
 					c := content.Text()
-					builder.WriteString(fmt.Sprintf("%s\n", *c))
+					builder.WriteString(fmt.Sprintf("%s", *c))
 				}
 			}
-			// end turn
-			builder.WriteString(endOfTurn)
+
+			// End user message turn
+			builder.WriteString(fmt.Sprintf("%s", endOfTurn))
+
 		case types.RoleAssistant:
-			// header
+			// Assistant message header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, assistant, endHeaderId))
-			// message body ( assistant response )
+
+			// Process assistant message content
+			hasContent := false
 			for _, content := range msg.Content.Slice() {
 				switch content.String() {
 				case "text":
 					c := content.Text()
-					builder.WriteString(fmt.Sprintf("%s\n", *c))
-					builder.WriteString(endOfTurn)
+					if *c != "" {
+						builder.WriteString(fmt.Sprintf("%s", *c))
+						hasContent = true
+					}
+
 				case "tool-input":
 					c := content.ToolInput()
-					// Parse arguments into a json format
+					// Convert arguments to JSON format
 					args := make(map[string]string)
 					for _, arg := range c.Arguments.Slice() {
 						if len(arg) != 2 {
@@ -248,7 +371,7 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 						args[arg[0]] = arg[1]
 					}
 
-					input := ""
+					input := "{}"
 					if len(args) > 0 {
 						jsonArgs, err := json.Marshal(args)
 						if err != nil {
@@ -257,54 +380,72 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 						input = string(jsonArgs)
 					}
 
-					builder.WriteString(fmt.Sprintf("<function=%s>%v</function>\n", c.Name, input))
-					// end turn
-					builder.WriteString(endOfMessage)
+					builder.WriteString(fmt.Sprintf("<function=%s>%s</function>", c.Name, input))
+					hasContent = true
 				}
 			}
+
+			// End assistant message appropriately
+			// If this is a tool call, use end of message token
+			// If this is regular text, use end of turn token
+			if i < len(messages)-1 && messages[i+1].Role == types.RoleTool {
+				builder.WriteString(endOfMessage)
+			} else if hasContent {
+				builder.WriteString(endOfTurn)
+			}
+
 		case types.RoleTool:
-			// header
+			// Tool (ipython) message header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, tool, endHeaderId))
-			// message body ( tool output )
+
+			// Process tool message content
 			for _, content := range msg.Content.Slice() {
-				if content.String() == "tool-output" {
+				switch content.String() {
+				case "text":
+					c := content.Text()
+					builder.WriteString(fmt.Sprintf("%s", *c))
+
+				case "tool-output":
 					output := content.ToolOutput()
 					for _, c := range output.Content.Slice() {
 						switch c.String() {
 						case "text":
-							builder.WriteString(fmt.Sprintf("%s\n", c.Text().Text))
+							builder.WriteString(fmt.Sprintf("%s", c.Text().Text))
 						case "image":
 							image := c.Image()
-							builder.WriteString(fmt.Sprintf("Image Data: %v\n", image.Data))
+							builder.WriteString(fmt.Sprintf("Image Data: %v", image.Data))
 						case "audio":
 							audio := c.Audio()
-							builder.WriteString(fmt.Sprintf("Audio Data: %v\n", audio.Data))
+							builder.WriteString(fmt.Sprintf("Audio Data: %v", audio.Data))
 						case "resource-link":
 							resource := c.ResourceLink()
-							builder.WriteString(fmt.Sprintf("Resource Link: %s\n", resource.URI))
+							builder.WriteString(fmt.Sprintf("Resource Link: %s", resource.URI))
 						case "resource-content":
 							content := c.ResourceContent()
 							switch content.ResourceContents.String() {
 							case "text":
-								builder.WriteString(fmt.Sprintf("Resource Content (Text): %s\n", content.ResourceContents.Text()))
+								builder.WriteString(fmt.Sprintf("Resource Content (Text): %s", content.ResourceContents.Text()))
 							case "blob":
-								builder.WriteString(fmt.Sprintf("Resource Content (Blob): %v\n", content.ResourceContents.Blob()))
+								builder.WriteString(fmt.Sprintf("Resource Content (Blob): %v", content.ResourceContents.Blob()))
 							}
 						}
 					}
 				}
 			}
-			// end turn
+
+			// End tool message turn
 			builder.WriteString(endOfTurn)
+
 		default:
-			return nil, fmt.Errorf("unknown supported message role: %v", msg.Role)
-		}
-		if i == last {
-			if msg.Role != types.RoleAssistant {
-				builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, assistant, endHeaderId))
-			}
+			return nil, fmt.Errorf("unsupported message role: %v", msg.Role)
 		}
 	}
+
+	// If the last message is not from assistant, add assistant header to prompt for response
+	if len(messages) > 0 && messages[len(messages)-1].Role != types.RoleAssistant {
+		builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, assistant, endHeaderId))
+	}
+
 	return []byte(builder.String()), nil
 }
 

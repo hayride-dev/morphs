@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -58,8 +59,7 @@ func main() {
 	}
 
 	a, err := agents.New(
-		format, graphExecutionCtxStream,
-		agents.WithName("Helpful Agent"),
+		agents.WithName("CLI Agent"),
 		agents.WithInstruction("You are a helpful assistant. Answer the user's questions to the best of your ability."),
 		agents.WithContext(ctx),
 		agents.WithTools(tools),
@@ -88,12 +88,19 @@ func main() {
 			}),
 		}
 
-		err := runner.InvokeStream(msg, writer, a)
+		messages, err := runner.Invoke(msg, a, format, graphExecutionCtxStream, writer)
 		if err != nil {
 			fmt.Println("error invoking agent:", err)
 			os.Exit(1)
 		}
 
+		bytes, err := json.Marshal(messages)
+		if err != nil {
+			fmt.Println("error marshaling messages:", err)
+			os.Exit(1)
+		}
+
+		fmt.Println("full messages:", string(bytes))
 		fmt.Println("\nWhat else can I help with? (type 'exit' to quit)")
 	}
 }
