@@ -1,2 +1,2 @@
 http = "https://github.com/WebAssembly/wasi-http/archive/refs/tags/v0.2.0.tar.gz"
-wasip2 = "https://github.com/hayride-dev/coven/releases/download/v0.0.62/hayride_wasip2_v0.0.62.tar.gz"
+wasip2 = "https://github.com/hayride-dev/coven/releases/download/v0.0.63/hayride_wasip2_v0.0.63.tar.gz"

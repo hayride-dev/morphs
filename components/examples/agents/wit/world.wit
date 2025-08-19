@@ -1,19 +1,21 @@
 package hayride-examples:agents@0.0.1;
 
 world cli {
-    include hayride:wasip2/imports@0.0.62;
-    include hayride:wasip2/exports@0.0.62;
+    include hayride:wasip2/imports@0.0.63;
+    include hayride:wasip2/exports@0.0.63;
     
-    import hayride:ai/runner@0.0.62;
-    import hayride:ai/model-repository@0.0.62;
+    import hayride:ai/runner@0.0.63;
+    import hayride:ai/model-repository@0.0.63;
+    import hayride:ai/graph-stream@0.0.63;
 }
 
 world http {
-    include hayride:wasip2/imports@0.0.62;
+    include hayride:wasip2/imports@0.0.63;
     
     export wasi:http/incoming-handler@0.2.0;
-    export hayride:http/config@0.0.62;
+    export hayride:http/config@0.0.63;
 
-    import hayride:ai/runner@0.0.62;
-    import hayride:ai/model-repository@0.0.62;
+    import hayride:ai/runner@0.0.63;
+    import hayride:ai/model-repository@0.0.63;
+    import hayride:ai/graph-stream@0.0.63;
 }

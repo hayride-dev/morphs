@@ -1,8 +1,8 @@
 package hayride-examples:http@0.0.1;
 
 world server {
-    include hayride:wasip2/imports@0.0.62;
+    include hayride:wasip2/imports@0.0.63;
  
     export wasi:http/incoming-handler@0.2.0;
-    export hayride:http/config@0.0.62;
+    export hayride:http/config@0.0.63;
 }

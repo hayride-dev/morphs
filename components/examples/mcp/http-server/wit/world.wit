@@ -1,11 +1,11 @@
 package hayride:mcp@0.0.1;
 
 world mcp-http-server {
-    include hayride:wasip2/imports@0.0.62;
+    include hayride:wasip2/imports@0.0.63;
 
     export wasi:http/incoming-handler@0.2.0;
-    export hayride:http/config@0.0.62;
+    export hayride:http/config@0.0.63;
 
-    import hayride:mcp/tools@0.0.62;
-    import hayride:mcp/auth@0.0.62;
+    import hayride:mcp/tools@0.0.63;
+    import hayride:mcp/auth@0.0.63;
 }

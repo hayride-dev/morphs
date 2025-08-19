@@ -2,7 +2,7 @@ module github.com/hayride-dev/morphs/components/examples/http-server/mcp
 
 go 1.23.6
 
-require github.com/hayride-dev/bindings v0.0.57
+require github.com/hayride-dev/bindings v0.0.60
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
