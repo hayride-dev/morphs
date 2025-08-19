@@ -1,9 +1,11 @@
 package llama3
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/hayride-dev/bindings/go/hayride/types"
+	"go.bytecodealliance.org/cm"
 )
 
 func TestDecode(t *testing.T) {
@@ -83,5 +85,188 @@ func TestDecode(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestEncode_BasicConversation(t *testing.T) {
+	model := &llama3{}
+
+	// Create a basic conversation: system + user message
+	messages := []types.Message{
+		{
+			Role: types.RoleSystem,
+			Content: cm.ToList([]types.MessageContent{
+				types.NewMessageContent(types.Text("You are a helpful assistant.")),
+			}),
+		},
+		{
+			Role: types.RoleUser,
+			Content: cm.ToList([]types.MessageContent{
+				types.NewMessageContent(types.Text("Hello, how are you?")),
+			}),
+		},
+	}
+
+	encoded, err := model.Encode(messages...)
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	result := string(encoded)
+	t.Logf("Encoded output:\n%s", result)
+
+	// Validate the structure
+	if !strings.Contains(result, "<|start_header_id|>system<|end_header_id|>") {
+		t.Error("Missing system header")
+	}
+
+	if !strings.Contains(result, "Environment: ipython") {
+		t.Error("Missing environment token for tools")
+	}
+
+	if !strings.Contains(result, "You are a helpful assistant.") {
+		t.Error("Missing system message content")
+	}
+
+	if !strings.Contains(result, "<|eot_id|>") {
+		t.Error("Missing end of turn token")
+	}
+
+	if !strings.Contains(result, "<|start_header_id|>user<|end_header_id|>") {
+		t.Error("Missing user header")
+	}
+
+	if !strings.Contains(result, "Hello, how are you?") {
+		t.Error("Missing user message content")
+	}
+
+	if !strings.Contains(result, "<|start_header_id|>assistant<|end_header_id|>") {
+		t.Error("Missing assistant header at end")
+	}
+
+	// Validate the exact expected format
+	expectedParts := []string{
+		"<|start_header_id|>system<|end_header_id|>",
+		"Environment: ipython",
+		"You are a helpful assistant.",
+		"<|eot_id|>",
+		"<|start_header_id|>user<|end_header_id|>",
+		"Hello, how are you?",
+		"<|eot_id|>",
+		"<|start_header_id|>assistant<|end_header_id|>",
+	}
+
+	for _, part := range expectedParts {
+		if !strings.Contains(result, part) {
+			t.Errorf("Missing expected part: %s", part)
+		}
+	}
+}
+
+func TestEncode_WithAssistantResponse(t *testing.T) {
+	model := &llama3{}
+
+	// Create conversation with assistant response
+	messages := []types.Message{
+		{
+			Role: types.RoleUser,
+			Content: cm.ToList([]types.MessageContent{
+				types.NewMessageContent(types.Text("Hello")),
+			}),
+		},
+		{
+			Role: types.RoleAssistant,
+			Content: cm.ToList([]types.MessageContent{
+				types.NewMessageContent(types.Text("Hi there!")),
+			}),
+		},
+	}
+
+	encoded, err := model.Encode(messages...)
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	result := string(encoded)
+	t.Logf("Encoded output with assistant:\n%s", result)
+
+	// Should NOT have assistant header at the end since last message is from assistant
+	if strings.HasSuffix(strings.TrimSpace(result), "<|start_header_id|>assistant<|end_header_id|>") {
+		t.Error("Should not add assistant header when last message is from assistant")
+	}
+
+	// Should contain the assistant message properly formatted
+	expectedParts := []string{
+		"<|start_header_id|>user<|end_header_id|>",
+		"Hello",
+		"<|start_header_id|>assistant<|end_header_id|>",
+		"Hi there!",
+		"<|eot_id|>",
+	}
+
+	for _, part := range expectedParts {
+		if !strings.Contains(result, part) {
+			t.Errorf("Missing expected part: %s", part)
+		}
+	}
+}
+
+func TestEncode_ToolCall(t *testing.T) {
+	model := &llama3{}
+
+	// Create a tool call scenario
+	messages := []types.Message{
+		{
+			Role: types.RoleUser,
+			Content: cm.ToList([]types.MessageContent{
+				types.NewMessageContent(types.Text("What's the weather?")),
+			}),
+		},
+		{
+			Role: types.RoleAssistant,
+			Content: cm.ToList([]types.MessageContent{
+				types.NewMessageContent(types.CallToolParams{
+					Name: "get_weather",
+					Arguments: cm.ToList([][2]string{
+						{"location", "New York"},
+					}),
+				}),
+			}),
+		},
+		{
+			Role: types.RoleTool,
+			Content: cm.ToList([]types.MessageContent{
+				types.NewMessageContent(types.Text("It's sunny, 72°F")),
+			}),
+		},
+	}
+
+	encoded, err := model.Encode(messages...)
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	result := string(encoded)
+	t.Logf("Encoded tool call output:\n%s", result)
+
+	// Validate tool call format
+	expectedParts := []string{
+		"<|start_header_id|>user<|end_header_id|>",
+		"What's the weather?",
+		"<|start_header_id|>assistant<|end_header_id|>",
+		"<function=get_weather>",
+		`{"location":"New York"}`,
+		"</function>",
+		"<|eom_id|>", // Should use end of message for tool calls
+		"<|start_header_id|>ipython<|end_header_id|>",
+		"It's sunny, 72°F",
+		"<|eot_id|>",
+		"<|start_header_id|>assistant<|end_header_id|>", // Should add assistant header at end
+	}
+
+	for _, part := range expectedParts {
+		if !strings.Contains(result, part) {
+			t.Errorf("Missing expected part: %s", part)
+		}
 	}
 }

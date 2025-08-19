@@ -162,10 +162,11 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 			// Check if this is a function call
 			if strings.Contains(content, "<function=") {
 				matches := customFunc.FindStringSubmatch(content)
-				if len(matches) >= 3 {
+				if len(matches) > 0 {
 					result := make(map[string]string)
-					for i, name := range customFunc.SubexpNames() {
-						if i > 0 && name != "" && i < len(matches) {
+					subexpNames := customFunc.SubexpNames()
+					for i, name := range subexpNames {
+						if i > 0 && name != "" && i < len(matches) && i < len(subexpNames) {
 							result[name] = matches[i]
 						}
 					}
@@ -293,10 +294,11 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 	// Check for function call without headers
 	if strings.Contains(msg, "<function=") {
 		matches := customFunc.FindStringSubmatch(msg)
-		if len(matches) >= 3 {
+		if len(matches) > 0 {
 			result := make(map[string]string)
-			for i, name := range customFunc.SubexpNames() {
-				if i > 0 && name != "" && i < len(matches) {
+			subexpNames := customFunc.SubexpNames()
+			for i, name := range subexpNames {
+				if i > 0 && name != "" && i < len(matches) && i < len(subexpNames) {
 					result[name] = matches[i]
 				}
 			}
