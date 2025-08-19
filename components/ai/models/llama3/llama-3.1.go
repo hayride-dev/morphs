@@ -90,6 +90,53 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 	msg = strings.TrimSuffix(msg, endOfText)
 	msg = strings.TrimSpace(msg)
 
+	// Check for incomplete messages - if we have header start but no end, or no content after header
+	if strings.Contains(msg, startHeaderId) {
+		// Count header starts vs header ends to detect incomplete messages
+		headerStarts := strings.Count(msg, startHeaderId)
+		headerEnds := strings.Count(msg, endHeaderId)
+
+		// If we have more starts than ends, we have an incomplete header
+		if headerStarts > headerEnds {
+			return nil, &models.PartialDecodeError{
+				Code: 4,
+				Data: "incomplete message header detected",
+			}
+		}
+
+		// Check if the last header segment is incomplete (no end token)
+		lastHeaderStart := strings.LastIndex(msg, startHeaderId)
+		if lastHeaderStart != -1 {
+			afterLastStart := msg[lastHeaderStart:]
+			if !strings.Contains(afterLastStart, endHeaderId) {
+				return nil, &models.PartialDecodeError{
+					Code: 4,
+					Data: "incomplete message header detected",
+				}
+			}
+
+			// Check if content after last header is incomplete (no end tokens)
+			lastHeaderEnd := strings.LastIndex(msg, endHeaderId)
+			if lastHeaderEnd != -1 {
+				afterLastHeader := msg[lastHeaderEnd+len(endHeaderId):]
+				// If there's content but no end tokens, it might be incomplete
+				if strings.TrimSpace(afterLastHeader) != "" &&
+					!strings.Contains(afterLastHeader, endOfTurn) &&
+					!strings.Contains(afterLastHeader, endOfMessage) {
+					// Check if this looks like it's in the middle of generating content
+					if len(strings.TrimSpace(afterLastHeader)) < 10 ||
+						strings.HasSuffix(strings.TrimSpace(afterLastHeader), "<") ||
+						strings.HasSuffix(strings.TrimSpace(afterLastHeader), "<function") {
+						return nil, &models.PartialDecodeError{
+							Code: 4,
+							Data: "incomplete message content detected",
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// Split by header tokens to get individual message segments
 	segments := strings.Split(msg, startHeaderId)
 
@@ -284,6 +331,22 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 					}),
 				}),
 			}, nil
+		}
+	}
+
+	// If we reach here and have no messages, check if the input looks like a partial decode
+	if strings.TrimSpace(msg) == "" {
+		return nil, &models.PartialDecodeError{
+			Code: 4,
+			Data: "empty or whitespace-only input",
+		}
+	}
+
+	// Check if input looks like it's in the middle of being generated
+	if len(msg) < 5 || strings.HasSuffix(msg, "<") {
+		return nil, &models.PartialDecodeError{
+			Code: 4,
+			Data: "input appears to be incomplete",
 		}
 	}
 
