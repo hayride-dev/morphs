@@ -99,7 +99,6 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 		// If we have more starts than ends, we have an incomplete header
 		if headerStarts > headerEnds {
 			return nil, &models.PartialDecodeError{
-				Code: 4,
 				Data: "incomplete message header detected",
 			}
 		}
@@ -110,7 +109,6 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 			afterLastStart := msg[lastHeaderStart:]
 			if !strings.Contains(afterLastStart, endHeaderId) {
 				return nil, &models.PartialDecodeError{
-					Code: 4,
 					Data: "incomplete message header detected",
 				}
 			}
@@ -124,7 +122,6 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 					!strings.Contains(afterLastHeader, endOfTurn) &&
 					!strings.Contains(afterLastHeader, endOfMessage) {
 					return nil, &models.PartialDecodeError{
-						Code: 4,
 						Data: "incomplete message content detected - missing end token",
 					}
 				}
@@ -332,7 +329,6 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 	// If we reach here and have no messages, check if the input looks like a partial decode
 	if strings.TrimSpace(msg) == "" {
 		return nil, &models.PartialDecodeError{
-			Code: 4,
 			Data: "empty or whitespace-only input",
 		}
 	}
@@ -340,24 +336,19 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 	// Check if input looks like it's in the middle of being generated
 	if len(msg) < 5 || strings.HasSuffix(msg, "<") {
 		return nil, &models.PartialDecodeError{
-			Code: 4,
 			Data: "input appears to be incomplete",
 		}
 	}
 
 	// For content without headers (legacy fallback), we should be very conservative
-	// Only return a message if it looks complete (no streaming artifacts)
-	// This should only be used for very simple cases or complete legacy content
+	// In streaming scenarios, raw text without proper Llama 3.1 headers is almost always incomplete
 	if !strings.Contains(msg, startHeaderId) {
-		// Check if this looks like incomplete streaming content
-		trimmed := strings.TrimSpace(msg)
-		if len(trimmed) < 3 ||
-			strings.HasSuffix(trimmed, " ") || // ends with space (likely streaming)
-			!strings.ContainsAny(trimmed, ".!?") { // no sentence ending punctuation
-			return nil, &models.PartialDecodeError{
-				Code: 4,
-				Data: "content appears to be incomplete - no proper sentence ending",
-			}
+		// For streaming scenarios, be extremely conservative
+		// Raw text without headers should almost always be treated as partial
+		// This is because in a streaming context, raw text is virtually always incomplete
+		// until the model outputs proper end tokens
+		return nil, &models.PartialDecodeError{
+			Data: "raw text without headers detected - likely streaming incomplete content",
 		}
 	}
 

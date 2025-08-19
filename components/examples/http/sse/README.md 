@@ -1,0 +1,2 @@
+# Server-Sent Events Example
+`curl -N -H "Accept: text/event-stream" http://localhost:9000/hello`
