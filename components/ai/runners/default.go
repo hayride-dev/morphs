@@ -31,7 +31,7 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 	if err := agent.Push(message); err != nil {
 		return nil, fmt.Errorf("failed to push message to agent: %w", err)
 	}
-
+	toolCall := false
 	for i := 0; i <= maxturn; i++ {
 		history, err := agent.Context()
 		if err != nil {
@@ -82,6 +82,7 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 				}
 				return nil, err
 			}
+			agent.Push(*msg)
 			// Add the message to the messages list
 			messages = append(messages, *msg)
 			// write the message bytes as json to the writer if provided ( i.e stream )
@@ -92,6 +93,7 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 				}
 				w.Write(b)
 			}
+
 			// check for tool call
 			if msg.Role == types.RoleAssistant {
 				for _, c := range msg.Content.Slice() {
@@ -102,13 +104,18 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 						}
 						toolCallMessage := types.Message{Role: types.RoleTool, Content: cm.ToList([]types.MessageContent{types.NewMessageContent(*toolResult)})}
 						agent.Push(toolCallMessage)
-						messages = append(messages, *msg)
+						messages = append(messages, toolCallMessage)
+						toolCall = true
 					}
 				}
 			}
 		}
+		if toolCall {
+			continue // If we had a tool call, we need to continue the loop to process the tool result
+		}
+		messages[len(messages)-1].Final = true // Mark the last message as final
+		break
 	}
-
 	return messages, nil
 }
 
