@@ -111,7 +111,8 @@ func (h *handler) handlerFunc(w http.ResponseWriter, r *http.Request) {
 		log.Fatal("failed to initialize graph execution context stream:", err)
 	}
 
-	response, err := h.runner.Invoke(msg, h.agent, format, graphExecutionCtxStream, nil)
+	w.WriteHeader(http.StatusOK)
+	response, err := h.runner.Invoke(msg, h.agent, format, graphExecutionCtxStream, w)
 	if err != nil {
 		http.Error(w, "failed to invoke agent: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -124,6 +125,7 @@ func (h *handler) handlerFunc(w http.ResponseWriter, r *http.Request) {
 	result, err := json.Marshal(resp)
 	if err != nil {
 		http.Error(w, "failed to marshal response: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
