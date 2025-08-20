@@ -11,9 +11,9 @@ sha256 = "498c465cfd04587db40f970fff2185daa597d074c20b68a8bcbae558f261499b"
 sha512 = "ead452f9b7bfb88593a502ec00d76d4228003d51c40fd0408aebc32d35c94673551b00230d730873361567cc209ec218c41fb4e95bad194268592c49e7964347"
 
 [hayride-http]
-url = "https://github.com/hayride-dev/coven/releases/download/v0.0.63/hayride_http_v0.0.63.tar.gz"
-sha256 = "516b972b609c66f5d135d37005f0543992e9a7d1652c2caedcbfdba1ec3a173c"
-sha512 = "ccebc7c26408e05db2fcb1ad242e17e006dfdd6e749d3293e6e007fa81b67267f090c521df905043e032357df351b71560e0d8cfd10297f1e0360e8adfcd0f70"
+url = "https://github.com/hayride-dev/coven/releases/download/v0.0.64/hayride_http_v0.0.64.tar.gz"
+sha256 = "f201730c760452b8d9e71db59a626486ead144e5809add1514befcfbf3d2a4df"
+sha512 = "d7dec20aeca07313a33724008330a3c19590b51c5f2cbb5e34a9a3496eb67d736526f3c0bad2f2a708603805934f96bdb043b617356104c0bf58e9c36c71ea68"
 
 [http]
 url = "https://github.com/WebAssembly/wasi-http/archive/refs/tags/v0.2.0.tar.gz"
@@ -34,7 +34,7 @@ sha256 = "622bd28bbeb43736375dc02bd003fd3a016ff8ee91e14bab488325c6b38bf966"
 sha512 = "5a63c1f36de0c4548e1d2297bdbededb28721cbad94ef7825c469eae29d7451c97e00b4c1d6730ee1ec0c4a5aac922961a2795762d4a0c3bb54e30a391a84bae"
 
 [wasip2]
-url = "https://github.com/hayride-dev/coven/releases/download/v0.0.63/hayride_wasip2_v0.0.63.tar.gz"
-sha256 = "b5d5bb065aa69b429255575db02a6c940bee10b41b62ea7879ce976bb6a39e98"
-sha512 = "2508195d005600d8223a162eeb9c21b9a674dac3d5b88399c0d3a2767ce51eff155e13fd8ae869400be7d55aaa8875291f7055beebbb59b4f9542bbdd5a67c29"
+url = "https://github.com/hayride-dev/coven/releases/download/v0.0.64/hayride_wasip2_v0.0.64.tar.gz"
+sha256 = "0b386f2f182a6407f0718e308a9b12698898c1cb57b1b87eab75ab46aaaef045"
+sha512 = "80ceccc057f2ec4bec601b27aa164a58d48a616c56649954afe7280264c5f141667fe301a8aa99338100248d686bd29ec4c1fbac61431e41fd8441954eb5d8a3"
 deps = ["cli", "clocks", "filesystem", "io", "random", "sockets"]

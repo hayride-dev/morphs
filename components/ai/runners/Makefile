@@ -4,4 +4,4 @@ default: all
 
 all: build
 
-build: ; tinygo build -target wasip2 --wit-package ./wit/ --wit-world default default.go
+build: ; tinygo build -target wasip2 --wit-package ./wit/ --wit-world default -o default.wasm .

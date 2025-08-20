@@ -50,8 +50,16 @@ func init() {
 		log.Fatal(err)
 	}
 
-	// Create a new runner instance
-	runner := runner.New()
+	// Create a new runner instance with SSE formatting enabled
+	runnerOpts := types.RunnerOptions{
+		MaxTurns: 10,
+		Writer:   types.WriterTypeSse,
+	}
+
+	runner, err := runner.New(runnerOpts)
+	if err != nil {
+		log.Fatal("failed to create runner:", err)
+	}
 
 	h := &handler{
 		agent:  a,

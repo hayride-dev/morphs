@@ -69,7 +69,15 @@ func main() {
 	}
 
 	// Create a new runner instance
-	runner := runner.New()
+	runnerOpts := types.RunnerOptions{
+		MaxTurns: 10,
+		Writer:   types.WriterTypeRaw,
+	}
+
+	runner, err := runner.New(runnerOpts)
+	if err != nil {
+		log.Fatal("failed to create runner:", err)
+	}
 	writer := cli.GetStdout(true)
 
 	writer.Write([]byte("What can I help with?\n"))

@@ -1,7 +1,7 @@
 package hayride:tools@0.0.1;
 
 world default {
-    include hayride:wasip2/imports@0.0.63;
+    include hayride:wasip2/imports@0.0.64;
     import hayride:datetime/datetime@0.0.1;
-    export hayride:mcp/tools@0.0.63;
+    export hayride:mcp/tools@0.0.64;
 }

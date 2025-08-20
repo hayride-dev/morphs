@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -19,21 +18,34 @@ const maxturn = 10
 
 var _ runner.Runner = (*defaultRunner)(nil)
 
-type defaultRunner struct{}
-
-func init() {
-	runner := &defaultRunner{}
-	export.Runner(runner)
+type defaultRunner struct {
+	options types.RunnerOptions
 }
 
-func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format models.Format, model graph.GraphExecutionContextStream, w io.Writer) ([]types.Message, error) {
+func init() {
+	export.Runner(constructor)
+}
+
+func constructor(options types.RunnerOptions) (runner.Runner, error) {
+	return &defaultRunner{
+		options: options,
+	}, nil
+}
+
+func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format models.Format, model graph.GraphExecutionContextStream, writer io.Writer) ([]types.Message, error) {
 	messages := make([]types.Message, 0)
+
+	// If we have a writer, wrap it in a message writer for SSE
+	var messageWriter *MessageWriter
+	if writer != nil {
+		messageWriter = NewMessageWriter(r.options.Writer, writer)
+	}
 
 	if err := agent.Push(message); err != nil {
 		return nil, fmt.Errorf("failed to push message to agent: %w", err)
 	}
 	toolCall := false
-	for i := 0; i <= maxturn; i++ {
+	for i := 0; i <= int(r.options.MaxTurns); i++ {
 		history, err := agent.Context()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get context: %w", err)
@@ -106,13 +118,11 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 									agent.Push(deltaMsg)
 									messages = append(messages, deltaMsg)
 
-									// write the delta message as json to the writer if provided
-									if w != nil {
-										b, err := json.Marshal(deltaMsg)
-										if err != nil {
-											return nil, fmt.Errorf("failed to marshal message: %w", err)
+									// write the delta message to the writer if provided
+									if messageWriter != nil {
+										if err := messageWriter.WriteMessage(deltaMsg); err != nil {
+											return nil, fmt.Errorf("failed to write message: %w", err)
 										}
-										w.Write(b)
 									}
 								}
 								lastDecodedLength = len(fullText)
@@ -122,12 +132,10 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 							agent.Push(*msg)
 							messages = append(messages, *msg)
 
-							if w != nil {
-								b, err := json.Marshal(msg)
-								if err != nil {
-									return nil, fmt.Errorf("failed to marshal message: %w", err)
+							if messageWriter != nil {
+								if err := messageWriter.WriteMessage(*msg); err != nil {
+									return nil, fmt.Errorf("failed to write message: %w", err)
 								}
-								w.Write(b)
 							}
 							lastDecodedLength = len(text)
 						}
@@ -137,12 +145,10 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 					agent.Push(*msg)
 					messages = append(messages, *msg)
 
-					if w != nil {
-						b, err := json.Marshal(msg)
-						if err != nil {
-							return nil, fmt.Errorf("failed to marshal message: %w", err)
+					if messageWriter != nil {
+						if err := messageWriter.WriteMessage(*msg); err != nil {
+							return nil, fmt.Errorf("failed to write message: %w", err)
 						}
-						w.Write(b)
 					}
 					lastDecodedLength = len(text)
 				}
