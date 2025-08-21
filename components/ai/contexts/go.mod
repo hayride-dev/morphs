@@ -2,6 +2,6 @@ module github.com/hayride-dev/morphs/components/ai/contexts
 
 go 1.23.6
 
-require github.com/hayride-dev/bindings v0.0.63
+require github.com/hayride-dev/bindings v0.0.64
 
 require go.bytecodealliance.org/cm v0.2.2 // indirect

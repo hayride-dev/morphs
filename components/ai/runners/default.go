@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -35,10 +36,10 @@ func constructor(options types.RunnerOptions) (runner.Runner, error) {
 func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format models.Format, model graph.GraphExecutionContextStream, writer io.Writer) ([]types.Message, error) {
 	messages := make([]types.Message, 0)
 
-	// If we have a writer, wrap it in a message writer for SSE
-	var messageWriter *MessageWriter
+	// If we have a writer, wrap it in a message writer with writer options
+	var messageWriter *runner.Writer
 	if writer != nil {
-		messageWriter = NewMessageWriter(r.options.Writer, writer)
+		messageWriter = runner.NewWriter(r.options.Writer, writer)
 	}
 
 	if err := agent.Push(message); err != nil {
@@ -120,7 +121,7 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 
 									// write the delta message to the writer if provided
 									if messageWriter != nil {
-										if err := messageWriter.WriteMessage(deltaMsg); err != nil {
+										if _, err := messageWriter.Write([]byte(newText)); err != nil {
 											return nil, fmt.Errorf("failed to write message: %w", err)
 										}
 									}
@@ -132,8 +133,13 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 							agent.Push(*msg)
 							messages = append(messages, *msg)
 
+							data, err := json.Marshal(*msg)
+							if err != nil {
+								return nil, fmt.Errorf("failed to marshal message: %w", err)
+							}
+
 							if messageWriter != nil {
-								if err := messageWriter.WriteMessage(*msg); err != nil {
+								if _, err := messageWriter.Write(data); err != nil {
 									return nil, fmt.Errorf("failed to write message: %w", err)
 								}
 							}
@@ -145,8 +151,13 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 					agent.Push(*msg)
 					messages = append(messages, *msg)
 
+					data, err := json.Marshal(*msg)
+					if err != nil {
+						return nil, fmt.Errorf("failed to marshal message: %w", err)
+					}
+
 					if messageWriter != nil {
-						if err := messageWriter.WriteMessage(*msg); err != nil {
+						if _, err := messageWriter.Write(data); err != nil {
 							return nil, fmt.Errorf("failed to write message: %w", err)
 						}
 					}
@@ -166,6 +177,18 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 						agent.Push(toolCallMessage)
 						messages = append(messages, toolCallMessage)
 						toolCall = true
+
+						// Marshal bytes and write
+						if messageWriter != nil {
+							data, err := json.Marshal(toolCallMessage)
+							if err != nil {
+								return nil, fmt.Errorf("failed to marshal tool call message: %w", err)
+							}
+
+							if _, err := messageWriter.Write(data); err != nil {
+								return nil, fmt.Errorf("failed to write tool call message: %w", err)
+							}
+						}
 					}
 				}
 			}
