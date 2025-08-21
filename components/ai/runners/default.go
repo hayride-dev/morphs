@@ -121,8 +121,20 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 
 									// write the delta message to the writer if provided
 									if messageWriter != nil {
-										if _, err := messageWriter.Write([]byte(newText)); err != nil {
-											return nil, fmt.Errorf("failed to write message: %w", err)
+										switch r.options.Writer {
+										case types.WriterTypeSse:
+											data, err = json.Marshal(deltaMsg)
+											if err != nil {
+												return nil, fmt.Errorf("failed to marshal delta message: %w", err)
+											}
+
+											if _, err := messageWriter.Write(data); err != nil {
+												return nil, fmt.Errorf("failed to write message: %w", err)
+											}
+										default:
+											if _, err := messageWriter.Write([]byte(*deltaMsg.Content.Data().Text())); err != nil {
+												return nil, fmt.Errorf("failed to write message: %w", err)
+											}
 										}
 									}
 								}
