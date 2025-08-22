@@ -82,118 +82,334 @@ func Constructor_3_1() (models.Format, error) {
 
 type llama3 struct{}
 
+// Helper function to check if text ends with a complete sentence
+func (m *llama3) endsWithCompleteSentence(text string) bool {
+	text = strings.TrimSpace(text)
+	if len(text) == 0 {
+		return false
+	}
+
+	// Check for sentence-ending punctuation
+	lastChar := text[len(text)-1]
+	return lastChar == '.' || lastChar == '!' || lastChar == '?' || lastChar == ':' || lastChar == ';'
+}
+
+// Helper function to check if text appears to be mid-word
+func (m *llama3) isMidWord(text string) bool {
+	text = strings.TrimSpace(text)
+	if len(text) == 0 {
+		return false
+	}
+
+	// If text ends with a letter or digit (not punctuation/whitespace), it might be mid-word
+	lastChar := text[len(text)-1]
+	return (lastChar >= 'a' && lastChar <= 'z') ||
+		(lastChar >= 'A' && lastChar <= 'Z') ||
+		(lastChar >= '0' && lastChar <= '9')
+}
+
 func (m *llama3) Decode(data []byte) (*types.Message, error) {
-	msg := string(data)
-	if strings.Contains(msg, pythonTag) {
-		// remove python tags
-		content := strings.TrimPrefix(msg, pythonTag)
-		content = strings.TrimSuffix(content, endOfMessage)
+	text := string(data)
 
-		matches := parseFunc.FindStringSubmatch(strings.TrimSpace(content))
-		if len(matches) != 3 {
-			return nil, fmt.Errorf("failed to parse assistant message, invalid function formation")
-		}
+	// If we don't have any content, return partial decode error
+	if len(strings.TrimSpace(text)) == 0 {
+		return nil, &models.PartialDecodeError{}
+	}
 
-		name := matches[0]
-		argsString := matches[1]
+	// Check if we have a complete message structure
+	// Look for header patterns to determine message structure
+	if !strings.Contains(text, startHeaderId) {
+		// Raw text without headers - could be streaming assistant response
+		if strings.TrimSpace(text) != "" {
+			trimmedText := strings.TrimSpace(text)
 
-		paramsList := parseFuncParams.FindAllString(argsString, -1)
-		var args [][2]string
-		for _, param := range paramsList {
-			// Split each parameter into name and value
-			paramParts := strings.SplitN(param, "=", 2)
-			if len(paramParts) != 2 {
-				return nil, fmt.Errorf("parameter format is invalid: %s", param)
+			// Check if this is a function call even without headers
+			functionMatches := customFunc.FindAllStringSubmatch(trimmedText, -1)
+			if len(functionMatches) > 0 {
+				// Parse as function call
+				return m.parseFunctionCallContent(trimmedText)
 			}
 
-			// Trim spaces and quotes from key
-			paramKey := strings.TrimSpace(paramParts[0])
-			paramKey = strings.Trim(paramKey, "'")
-			paramKey = strings.Trim(paramKey, "\"")
-
-			// Trim spaces and quotes from value
-			paramValue := strings.TrimSpace(paramParts[1])
-			paramValue = strings.Trim(paramValue, "'")
-			paramValue = strings.Trim(paramValue, "\"")
-
-			args = append(args, [2]string{paramKey, paramValue})
-		}
-		return &types.Message{
-			Role: types.RoleAssistant,
-			Content: cm.ToList([]types.MessageContent{
-				types.NewMessageContent(types.CallToolParams{
-					Name:      name,
-					Arguments: cm.ToList(args),
-				}),
-			}),
-		}, nil
-	} else if strings.Contains(msg, "<function") {
-		// Custom function definition
-		matches := customFunc.FindStringSubmatch(msg)
-		if len(matches) != 3 {
-			return nil, fmt.Errorf("failed to parse assistant message, invalid function formation")
-		}
-
-		if matches != nil {
-			result := make(map[string]string)
-			for i, name := range customFunc.SubexpNames() {
-				if i > 0 && name != "" {
-					result[name] = matches[i]
-				}
+			// For plain text, try to build complete sentences
+			// If text doesn't end with complete sentence and appears to be mid-word/sentence,
+			// return partial decode error to get more data
+			if !m.endsWithCompleteSentence(trimmedText) &&
+				(m.isMidWord(trimmedText) || len(trimmedText) < 10) {
+				return nil, &models.PartialDecodeError{}
 			}
 
-			input := [][2]string{}
-			if values, ok := result["input"]; ok && values != "" {
-				// Unmarshal into a map
-				var m map[string]string
-				err := json.Unmarshal([]byte(values), &m)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse input parameters: %v", err)
-				}
-
-				for k, v := range m {
-					input = append(input, [2]string{k, v})
-				}
+			// Return as partial assistant message for streaming
+			content := []types.MessageContent{
+				types.NewMessageContent(types.Text(trimmedText)),
 			}
 
 			return &types.Message{
-				Role: types.RoleAssistant,
-				Content: cm.ToList([]types.MessageContent{
-					types.NewMessageContent(types.CallToolParams{
-						Name:      result["name"],
-						Arguments: cm.ToList(input),
-					}),
-				}),
+				Role:    types.RoleAssistant,
+				Content: cm.ToList(content),
 			}, nil
+		}
+
+		return nil, &models.PartialDecodeError{}
+	}
+
+	// Parse structured message with headers
+	return m.parseStructuredMessage(text)
+}
+
+func (m *llama3) parseFunctionCallContent(content string) (*types.Message, error) {
+	var messageContents []types.MessageContent
+
+	functionMatches := customFunc.FindAllStringSubmatch(content, -1)
+	for _, match := range functionMatches {
+		if len(match) < 3 {
+			continue
+		}
+
+		functionName := match[1]
+		jsonInput := match[2]
+
+		// Parse JSON input into arguments
+		var args map[string]interface{}
+		if jsonInput != "" {
+			if err := json.Unmarshal([]byte(jsonInput), &args); err != nil {
+				return nil, fmt.Errorf("invalid function call JSON: %v", err)
+			}
+		}
+
+		// Convert to tool call format using CallToolParams
+		var arguments [][2]string
+		for key, value := range args {
+			valueStr := fmt.Sprintf("%v", value)
+			arguments = append(arguments, [2]string{key, valueStr})
+		}
+
+		toolCall := types.CallToolParams{
+			Name:      functionName,
+			Arguments: cm.ToList(arguments),
+		}
+
+		messageContents = append(messageContents, types.NewMessageContent(toolCall))
+	}
+
+	if len(messageContents) == 0 {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	return &types.Message{
+		Role:    types.RoleAssistant,
+		Content: cm.ToList(messageContents),
+	}, nil
+}
+
+func (m *llama3) parseStructuredMessage(text string) (*types.Message, error) {
+	// Find the last complete message in the text
+	headerPattern := regexp.MustCompile(startHeaderId + `([^<]+)` + endHeaderId)
+	headerMatches := headerPattern.FindAllStringSubmatch(text, -1)
+
+	if len(headerMatches) == 0 {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	// Get the last header match to find the current message being constructed
+	lastHeader := headerMatches[len(headerMatches)-1]
+	if len(lastHeader) < 2 {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	role := strings.TrimSpace(lastHeader[1])
+
+	// Find the content after the last header
+	lastHeaderStart := strings.LastIndex(text, lastHeader[0])
+	if lastHeaderStart == -1 {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	// Extract content after the header
+	contentStart := lastHeaderStart + len(lastHeader[0])
+	if contentStart >= len(text) {
+		// Header exists but no content yet
+		return nil, &models.PartialDecodeError{}
+	}
+
+	content := text[contentStart:]
+
+	// Check for end tokens to determine if message is complete
+	hasEndToken := strings.Contains(content, endOfTurn) ||
+		strings.Contains(content, endOfMessage) ||
+		strings.Contains(content, endOfText)
+
+	// Parse based on role
+	switch role {
+	case assistant:
+		return m.parseAssistantMessage(content, hasEndToken)
+	case system:
+		return m.parseSystemMessage(content, hasEndToken)
+	case user:
+		return m.parseUserMessage(content, hasEndToken)
+	case tool:
+		return m.parseToolMessage(content, hasEndToken)
+	default:
+		return nil, &models.PartialDecodeError{}
+	}
+}
+
+func (m *llama3) parseAssistantMessage(content string, hasEndToken bool) (*types.Message, error) {
+	// Clean content of end tokens for processing
+	cleanContent := content
+	cleanContent = strings.Replace(cleanContent, endOfTurn, "", -1)
+	cleanContent = strings.Replace(cleanContent, endOfMessage, "", -1)
+	cleanContent = strings.Replace(cleanContent, endOfText, "", -1)
+	cleanContent = strings.TrimSpace(cleanContent)
+
+	var messageContents []types.MessageContent
+
+	// Check for function calls using the custom function pattern
+	functionMatches := customFunc.FindAllStringSubmatch(cleanContent, -1)
+
+	if len(functionMatches) > 0 {
+		// This is a function call message
+		for _, match := range functionMatches {
+			if len(match) < 3 {
+				continue
+			}
+
+			functionName := match[1]
+			jsonInput := match[2]
+
+			// Parse JSON input into arguments
+			var args map[string]interface{}
+			if jsonInput != "" {
+				if err := json.Unmarshal([]byte(jsonInput), &args); err != nil {
+					// If we can't parse JSON and don't have end token, this might be partial
+					if !hasEndToken {
+						return nil, &models.PartialDecodeError{}
+					}
+					// If we have end token but invalid JSON, treat as error
+					return nil, fmt.Errorf("invalid function call JSON: %v", err)
+				}
+			}
+
+			// Convert to tool call format using CallToolParams
+			var arguments [][2]string
+			for key, value := range args {
+				valueStr := fmt.Sprintf("%v", value)
+				arguments = append(arguments, [2]string{key, valueStr})
+			}
+
+			toolCall := types.CallToolParams{
+				Name:      functionName,
+				Arguments: cm.ToList(arguments),
+			}
+
+			messageContents = append(messageContents, types.NewMessageContent(toolCall))
+		}
+
+		// For function calls, we need the end of message token to be complete
+		if !strings.Contains(content, endOfMessage) && !hasEndToken {
+			return nil, &models.PartialDecodeError{}
+		}
+	} else {
+		// This is a text response
+		if cleanContent == "" {
+			// Empty content, might be starting to generate
+			if !hasEndToken {
+				return nil, &models.PartialDecodeError{}
+			}
 		} else {
-			return nil, fmt.Errorf("failed to parse assistant message, invalid function formation")
+			// For text responses without end tokens, try to build complete sentences
+			if !hasEndToken && !m.endsWithCompleteSentence(cleanContent) &&
+				(m.isMidWord(cleanContent) || len(cleanContent) < 10) {
+				return nil, &models.PartialDecodeError{}
+			}
+		}
+
+		// For text responses, we can stream partial content
+		if cleanContent != "" {
+			messageContents = append(messageContents, types.NewMessageContent(types.Text(cleanContent)))
 		}
 	}
 
-	message := &types.Message{
-		Role: types.RoleAssistant,
-		Content: cm.ToList([]types.MessageContent{
-			types.NewMessageContent(types.Text(msg)),
-		}),
+	if len(messageContents) == 0 {
+		return nil, &models.PartialDecodeError{}
 	}
 
-	return message, nil
+	return &types.Message{
+		Role:    types.RoleAssistant,
+		Content: cm.ToList(messageContents),
+	}, nil
+}
+
+func (m *llama3) parseSystemMessage(content string, hasEndToken bool) (*types.Message, error) {
+	// Clean content of end tokens
+	cleanContent := strings.Replace(content, endOfTurn, "", -1)
+	cleanContent = strings.TrimSpace(cleanContent)
+
+	if cleanContent == "" && !hasEndToken {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	messageContents := []types.MessageContent{
+		types.NewMessageContent(types.Text(cleanContent)),
+	}
+
+	return &types.Message{
+		Role:    types.RoleSystem,
+		Content: cm.ToList(messageContents),
+	}, nil
+}
+
+func (m *llama3) parseUserMessage(content string, hasEndToken bool) (*types.Message, error) {
+	// Clean content of end tokens
+	cleanContent := strings.Replace(content, endOfTurn, "", -1)
+	cleanContent = strings.TrimSpace(cleanContent)
+
+	if cleanContent == "" && !hasEndToken {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	messageContents := []types.MessageContent{
+		types.NewMessageContent(types.Text(cleanContent)),
+	}
+
+	return &types.Message{
+		Role:    types.RoleUser,
+		Content: cm.ToList(messageContents),
+	}, nil
+}
+
+func (m *llama3) parseToolMessage(content string, hasEndToken bool) (*types.Message, error) {
+	// Clean content of end tokens
+	cleanContent := strings.Replace(content, endOfTurn, "", -1)
+	cleanContent = strings.TrimSpace(cleanContent)
+
+	if cleanContent == "" && !hasEndToken {
+		return nil, &models.PartialDecodeError{}
+	}
+
+	// Tool messages are typically just text content
+	messageContents := []types.MessageContent{
+		types.NewMessageContent(types.Text(cleanContent)),
+	}
+
+	return &types.Message{
+		Role:    types.RoleTool,
+		Content: cm.ToList(messageContents),
+	}, nil
 }
 
 func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 	builder := &strings.Builder{}
-	last := len(messages) - 1
+
 	for i, msg := range messages {
-		//builder.WriteString("<|begin_of_text|>")
 		switch msg.Role {
 		case types.RoleSystem:
-			// set the system message
+			// System message header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, system, endHeaderId))
-			// add environment token to enable tools by default
-			// TODO :: add ability to disable tool support in system prompt
-			builder.WriteString(fmt.Sprintf("%s\n", env))
 
-			// message body, collect tool schema definitions
+			// Add environment token to enable tools by default
+			builder.WriteString(fmt.Sprintf("%s\n\n", env))
+
+			// Process system message content
 			tools := []types.Tool{}
 			for _, content := range msg.Content.Slice() {
 				switch content.String() {
@@ -206,40 +422,50 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 				}
 			}
 
+			// Add tool definitions if available
 			if len(tools) > 0 {
 				toolString := customToolEncode(tools)
 				if toolString != "" {
-					builder.WriteString(fmt.Sprintf("%s\n", toolString))
+					builder.WriteString(fmt.Sprintf("%s", toolString))
 				}
 			}
 
-			// end system message turn
+			// End system message turn
 			builder.WriteString(endOfTurn)
+
 		case types.RoleUser:
-			// header
+			// User message header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, user, endHeaderId))
-			// message body ( user prompt )
+
+			// Process user message content
 			for _, content := range msg.Content.Slice() {
 				if content.String() == "text" {
 					c := content.Text()
-					builder.WriteString(fmt.Sprintf("%s\n", *c))
+					builder.WriteString(fmt.Sprintf("%s", *c))
 				}
 			}
-			// end turn
-			builder.WriteString(endOfTurn)
+
+			// End user message turn
+			builder.WriteString(fmt.Sprintf("%s", endOfTurn))
+
 		case types.RoleAssistant:
-			// header
+			// Assistant message header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, assistant, endHeaderId))
-			// message body ( assistant response )
+
+			// Process assistant message content
+			hasContent := false
 			for _, content := range msg.Content.Slice() {
 				switch content.String() {
 				case "text":
 					c := content.Text()
-					builder.WriteString(fmt.Sprintf("%s\n", *c))
-					builder.WriteString(endOfTurn)
+					if *c != "" {
+						builder.WriteString(fmt.Sprintf("%s", *c))
+						hasContent = true
+					}
+
 				case "tool-input":
 					c := content.ToolInput()
-					// Parse arguments into a json format
+					// Convert arguments to JSON format
 					args := make(map[string]string)
 					for _, arg := range c.Arguments.Slice() {
 						if len(arg) != 2 {
@@ -248,7 +474,7 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 						args[arg[0]] = arg[1]
 					}
 
-					input := ""
+					input := "{}"
 					if len(args) > 0 {
 						jsonArgs, err := json.Marshal(args)
 						if err != nil {
@@ -257,54 +483,72 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 						input = string(jsonArgs)
 					}
 
-					builder.WriteString(fmt.Sprintf("<function=%s>%v</function>\n", c.Name, input))
-					// end turn
-					builder.WriteString(endOfMessage)
+					builder.WriteString(fmt.Sprintf("<function=%s>%s</function>", c.Name, input))
+					hasContent = true
 				}
 			}
+
+			// End assistant message appropriately
+			// If this is a tool call, use end of message token
+			// If this is regular text, use end of turn token
+			if i < len(messages)-1 && messages[i+1].Role == types.RoleTool {
+				builder.WriteString(endOfMessage)
+			} else if hasContent {
+				builder.WriteString(endOfTurn)
+			}
+
 		case types.RoleTool:
-			// header
+			// Tool (ipython) message header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, tool, endHeaderId))
-			// message body ( tool output )
+
+			// Process tool message content
 			for _, content := range msg.Content.Slice() {
-				if content.String() == "tool-output" {
+				switch content.String() {
+				case "text":
+					c := content.Text()
+					builder.WriteString(fmt.Sprintf("%s", *c))
+
+				case "tool-output":
 					output := content.ToolOutput()
 					for _, c := range output.Content.Slice() {
 						switch c.String() {
 						case "text":
-							builder.WriteString(fmt.Sprintf("%s\n", c.Text().Text))
+							builder.WriteString(fmt.Sprintf("%s", c.Text().Text))
 						case "image":
 							image := c.Image()
-							builder.WriteString(fmt.Sprintf("Image Data: %v\n", image.Data))
+							builder.WriteString(fmt.Sprintf("Image Data: %v", image.Data))
 						case "audio":
 							audio := c.Audio()
-							builder.WriteString(fmt.Sprintf("Audio Data: %v\n", audio.Data))
+							builder.WriteString(fmt.Sprintf("Audio Data: %v", audio.Data))
 						case "resource-link":
 							resource := c.ResourceLink()
-							builder.WriteString(fmt.Sprintf("Resource Link: %s\n", resource.URI))
+							builder.WriteString(fmt.Sprintf("Resource Link: %s", resource.URI))
 						case "resource-content":
 							content := c.ResourceContent()
 							switch content.ResourceContents.String() {
 							case "text":
-								builder.WriteString(fmt.Sprintf("Resource Content (Text): %s\n", content.ResourceContents.Text()))
+								builder.WriteString(fmt.Sprintf("Resource Content (Text): %s", content.ResourceContents.Text()))
 							case "blob":
-								builder.WriteString(fmt.Sprintf("Resource Content (Blob): %v\n", content.ResourceContents.Blob()))
+								builder.WriteString(fmt.Sprintf("Resource Content (Blob): %v", content.ResourceContents.Blob()))
 							}
 						}
 					}
 				}
 			}
-			// end turn
+
+			// End tool message turn
 			builder.WriteString(endOfTurn)
+
 		default:
-			return nil, fmt.Errorf("unknown supported message role: %v", msg.Role)
-		}
-		if i == last {
-			if msg.Role != types.RoleAssistant {
-				builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, assistant, endHeaderId))
-			}
+			return nil, fmt.Errorf("unsupported message role: %v", msg.Role)
 		}
 	}
+
+	// If the last message is not from assistant, add assistant header to prompt for response
+	if len(messages) > 0 && messages[len(messages)-1].Role != types.RoleAssistant {
+		builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, assistant, endHeaderId))
+	}
+
 	return []byte(builder.String()), nil
 }
 

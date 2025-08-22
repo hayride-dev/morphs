@@ -1,6 +1,6 @@
 package hayride-examples:hello-world@0.0.1;
 
 world hello-world {
-    include hayride:wasip2/imports@0.0.62;
-    include hayride:wasip2/exports@0.0.62;
+    include hayride:wasip2/imports@0.0.64;
+    include hayride:wasip2/exports@0.0.64;
 }

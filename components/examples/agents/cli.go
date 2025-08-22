@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -58,8 +59,7 @@ func main() {
 	}
 
 	a, err := agents.New(
-		format, graphExecutionCtxStream,
-		agents.WithName("Helpful Agent"),
+		agents.WithName("CLI Agent"),
 		agents.WithInstruction("You are a helpful assistant. Answer the user's questions to the best of your ability."),
 		agents.WithContext(ctx),
 		agents.WithTools(tools),
@@ -69,15 +69,23 @@ func main() {
 	}
 
 	// Create a new runner instance
-	runner := runner.New()
+	runnerOpts := types.RunnerOptions{
+		MaxTurns: 10,
+		Writer:   types.WriterTypeRaw,
+	}
+
+	runner, err := runner.New(runnerOpts)
+	if err != nil {
+		log.Fatal("failed to create runner:", err)
+	}
 	writer := cli.GetStdout(true)
 
-	fmt.Println("What can I help with?")
+	writer.Write([]byte("What can I help with?\n"))
 	for {
 		input, _ := reader.ReadString('\n')
 		prompt := strings.TrimSpace(input)
 		if strings.ToLower(prompt) == "exit" {
-			fmt.Println("Goodbye!")
+			writer.Write([]byte("Goodbye!\n"))
 			break
 		}
 
@@ -88,12 +96,19 @@ func main() {
 			}),
 		}
 
-		err := runner.InvokeStream(msg, writer, a)
+		messages, err := runner.Invoke(msg, a, format, graphExecutionCtxStream, writer)
 		if err != nil {
-			fmt.Println("error invoking agent:", err)
+			writer.Write([]byte(fmt.Sprintf("error invoking agent: %v\n", err)))
 			os.Exit(1)
 		}
 
-		fmt.Println("\nWhat else can I help with? (type 'exit' to quit)")
+		bytes, err := json.MarshalIndent(messages, "", "  ")
+		if err != nil {
+			fmt.Println("error marshaling messages:", err)
+			os.Exit(1)
+		}
+
+		writer.Write([]byte(fmt.Sprintf("full messages: %s\n", string(bytes))))
+		writer.Write([]byte("\nWhat else can I help with? (type 'exit' to quit)\n"))
 	}
 }

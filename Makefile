@@ -1,4 +1,4 @@
-.PHONY: build $(SUBDIRS) register compose register-default-tools register-datetime register-default-agent register-llama register-inmemory register-cli compose-cli compose-server register-composed
+.PHONY: build $(SUBDIRS) wit-deps register compose register-default-tools register-datetime register-default-agent register-llama register-inmemory register-cli compose-cli compose-server register-composed
 
 SUBDIRS := $(shell find . -mindepth 1 -maxdepth 4 -type d -exec test -f '{}/Makefile' \; -print)
 
@@ -8,6 +8,13 @@ build:
 	@for dir in $(SUBDIRS); do \
 		echo "==> Building in $$dir"; \
 		$(MAKE) -C $$dir build; \
+	done
+
+wit-deps:
+	@for deps_file in $$(find . -name "deps.toml" -path "*/wit/deps.toml"); do \
+		dir=$$(dirname "$$(dirname "$$deps_file")"); \
+		echo "==> Updating wit deps in $$dir"; \
+		(cd "$$dir" && wit-deps update); \
 	done
 
 register-default-tools:

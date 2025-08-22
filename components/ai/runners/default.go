@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/hayride-dev/bindings/go/hayride/ai/agents"
+	"github.com/hayride-dev/bindings/go/hayride/ai/graph"
+	"github.com/hayride-dev/bindings/go/hayride/ai/models"
 	"github.com/hayride-dev/bindings/go/hayride/ai/runner"
 	"github.com/hayride-dev/bindings/go/hayride/ai/runner/export"
 	"github.com/hayride-dev/bindings/go/hayride/types"
@@ -16,115 +19,199 @@ const maxturn = 10
 
 var _ runner.Runner = (*defaultRunner)(nil)
 
-type defaultRunner struct{}
+type defaultRunner struct {
+	options types.RunnerOptions
+}
 
 func init() {
-	runner := &defaultRunner{}
-	export.Runner(runner)
+	export.Runner(constructor)
 }
 
-func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent) ([]types.Message, error) {
+func constructor(options types.RunnerOptions) (runner.Runner, error) {
+	return &defaultRunner{
+		options: options,
+	}, nil
+}
 
-	var messages []types.Message
-	currentMessage := message
-	for i := 0; i <= maxturn; i++ {
-		msg, err := agent.Compute(currentMessage)
+func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format models.Format, model graph.GraphExecutionContextStream, writer io.Writer) ([]types.Message, error) {
+	messages := make([]types.Message, 0)
+
+	// If we have a writer, wrap it in a message writer with writer options
+	var messageWriter *runner.Writer
+	if writer != nil {
+		messageWriter = runner.NewWriter(r.options.Writer, writer)
+	}
+
+	if err := agent.Push(message); err != nil {
+		return nil, fmt.Errorf("failed to push message to agent: %w", err)
+	}
+	toolCall := false
+	for i := 0; i <= int(r.options.MaxTurns); i++ {
+		history, err := agent.Context()
 		if err != nil {
-			return nil, fmt.Errorf("failed to compute message: %w", err)
+			return nil, fmt.Errorf("failed to get context: %w", err)
+		}
+		// Format encode the messages
+		data, err := format.Encode(history...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode context messages: %w", err)
 		}
 
-		// Add the message to the messages list
-		messages = append(messages, *msg)
+		// Call Graph Compute
+		d := graph.TensorDimensions(cm.ToList([]uint32{1}))
+		td := graph.TensorData(cm.ToList(data))
+		t := graph.NewTensor(d, graph.TensorTypeU8, td)
+		inputs := []graph.NamedTensor{
+			{
+				F0: "user",
+				F1: t,
+			},
+		}
 
-		calledTool := false
-		switch msg.Role {
-		case types.RoleAssistant:
-			for _, c := range msg.Content.Slice() {
-				switch c.String() {
-				case "tool-input":
-					toolResult, err := agent.Execute(*c.ToolInput())
-					if err != nil {
-						return nil, fmt.Errorf("failed to call tool: %w", err)
-					}
-					calledTool = true
+		namedTensorStream, err := model.Compute(inputs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compute graph: %w", err)
+		}
 
-					toolCall := types.Message{Role: types.RoleTool, Content: cm.ToList([]types.MessageContent{types.NewMessageContent(*toolResult)})}
-
-					// Add the tool call to the messages
-					messages = append(messages, toolCall)
-
-					// re-compute with the tool output
-					currentMessage = toolCall
-				default:
-					// If the content is not a tool input, we can just continue
+		// read the output from the stream
+		stream := namedTensorStream.F1
+		ts := graph.TensorStream(stream)
+		//
+		text := make([]byte, 0)
+		part := make([]byte, 256)
+		var lastDecodedLength int = 0 // Track how much we've already processed
+		for {
+			bytesRead, err := ts.Read(part)
+			if bytesRead == 0 || err == io.EOF {
+				break
+			} else if err != nil {
+				return nil, fmt.Errorf("failed to read from tensor stream: %w", err)
+			}
+			text = append(text, part[:bytesRead]...)
+			// Decode Message
+			msg, err := format.Decode(text) // Gets us our API Message
+			if err != nil {
+				if _, ok := err.(*models.PartialDecodeError); ok {
+					// continue reading
 					continue
 				}
+				return nil, err
 			}
-		default:
-			// the role should always be an assistant
-			return nil, fmt.Errorf("unexpected role: %s", msg.Role)
+
+			// Only process if we have new content
+			if len(text) > lastDecodedLength {
+				// Extract only the new text content for streaming
+				if msg.Role == types.RoleAssistant && len(msg.Content.Slice()) > 0 {
+					for _, content := range msg.Content.Slice() {
+						if content.String() == "text" {
+							fullText := *content.Text()
+							// Extract only the new part
+							if len(fullText) > lastDecodedLength {
+								newText := fullText[lastDecodedLength:]
+								if strings.TrimSpace(newText) != "" {
+									// Create a message with just the delta
+									deltaMsg := types.Message{
+										Role: types.RoleAssistant,
+										Content: cm.ToList([]types.MessageContent{
+											types.NewMessageContent(types.Text(newText)),
+										}),
+									}
+									agent.Push(deltaMsg)
+									messages = append(messages, deltaMsg)
+
+									// write the delta message to the writer if provided
+									if messageWriter != nil {
+										switch r.options.Writer {
+										case types.WriterTypeSse:
+											data, err = json.Marshal(deltaMsg)
+											if err != nil {
+												return nil, fmt.Errorf("failed to marshal delta message: %w", err)
+											}
+
+											if _, err := messageWriter.Write(data); err != nil {
+												return nil, fmt.Errorf("failed to write message: %w", err)
+											}
+										default:
+											if _, err := messageWriter.Write([]byte(*deltaMsg.Content.Data().Text())); err != nil {
+												return nil, fmt.Errorf("failed to write message: %w", err)
+											}
+										}
+									}
+								}
+								lastDecodedLength = len(fullText)
+							}
+						} else {
+							// For non-text content (like tool calls), send the complete message
+							agent.Push(*msg)
+							messages = append(messages, *msg)
+
+							data, err := json.Marshal(*msg)
+							if err != nil {
+								return nil, fmt.Errorf("failed to marshal message: %w", err)
+							}
+
+							if messageWriter != nil {
+								if _, err := messageWriter.Write(data); err != nil {
+									return nil, fmt.Errorf("failed to write message: %w", err)
+								}
+							}
+							lastDecodedLength = len(text)
+						}
+					}
+				} else {
+					// For non-assistant messages, send complete message
+					agent.Push(*msg)
+					messages = append(messages, *msg)
+
+					data, err := json.Marshal(*msg)
+					if err != nil {
+						return nil, fmt.Errorf("failed to marshal message: %w", err)
+					}
+
+					if messageWriter != nil {
+						if _, err := messageWriter.Write(data); err != nil {
+							return nil, fmt.Errorf("failed to write message: %w", err)
+						}
+					}
+					lastDecodedLength = len(text)
+				}
+			}
+
+			// check for tool call
+			if msg.Role == types.RoleAssistant {
+				for _, c := range msg.Content.Slice() {
+					if c.String() == "tool-input" {
+						toolResult, err := agent.Execute(*c.ToolInput())
+						if err != nil {
+							return nil, fmt.Errorf("failed to call tool: %w", err)
+						}
+						toolCallMessage := types.Message{Role: types.RoleTool, Content: cm.ToList([]types.MessageContent{types.NewMessageContent(*toolResult)})}
+						agent.Push(toolCallMessage)
+						messages = append(messages, toolCallMessage)
+						toolCall = true
+
+						// Marshal bytes and write
+						if messageWriter != nil {
+							data, err := json.Marshal(toolCallMessage)
+							if err != nil {
+								return nil, fmt.Errorf("failed to marshal tool call message: %w", err)
+							}
+
+							if _, err := messageWriter.Write(data); err != nil {
+								return nil, fmt.Errorf("failed to write tool call message: %w", err)
+							}
+						}
+					}
+				}
+			}
 		}
-		if !calledTool {
-			// assuming if the agent is not requesting a tool call, it is the final message
-			break
+		if toolCall {
+			continue // If we had a tool call, we need to continue the loop to process the tool result
 		}
+		messages[len(messages)-1].Final = true // Mark the last message as final
+		break
 	}
 	return messages, nil
-}
-
-func (r *defaultRunner) InvokeStream(message types.Message, writer io.Writer, agent agents.Agent) error {
-
-	currentMessage := message
-	for i := 0; i <= maxturn; i++ {
-		msg, err := agent.Compute(currentMessage)
-		if err != nil {
-			return fmt.Errorf("failed to compute message: %w", err)
-		}
-
-		// Check for a tool call
-		calledTool := false
-		switch msg.Role {
-		case types.RoleAssistant:
-			for _, c := range msg.Content.Slice() {
-				switch c.String() {
-				case "tool-input":
-					toolResult, err := agent.Execute(*c.ToolInput())
-					if err != nil {
-						return fmt.Errorf("failed to call tool: %w", err)
-					}
-					calledTool = true
-					// Push the tool output to the context and re-compute with the tool output
-					currentMessage = types.Message{
-						Role:    types.RoleTool,
-						Content: cm.ToList([]types.MessageContent{types.NewMessageContent(*toolResult)}),
-					}
-				default:
-					// If the content is not a tool input, we can just continue
-					continue
-				}
-			}
-		default:
-			// the role should always be an assistant
-			return fmt.Errorf("unexpected role: %s", msg.Role)
-		}
-
-		if !calledTool {
-			// Write full message to the output stream
-			bytes, err := json.Marshal(msg)
-			if err != nil {
-				return fmt.Errorf("failed to marshal final message: %w", err)
-			}
-			_, err = writer.Write(bytes)
-			if err != nil {
-				return fmt.Errorf("failed to write final message: %w", err)
-			}
-
-			// assuming if the agent is not requesting a tool call, it is the final message
-			break
-		}
-	}
-
-	return nil
 }
 
 func main() {}
