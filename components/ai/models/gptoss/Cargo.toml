@@ -1,0 +1,13 @@
+[package]
+name = "gptoss"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+wit-bindgen = "0.44.0"
+openai-harmony = { path = "/Users/ethanlewis/Projects/rust/github.com/elewis787/harmony" }
+anyhow = "1.0"
+
+[lib]
+crate-type = ["cdylib"]
+

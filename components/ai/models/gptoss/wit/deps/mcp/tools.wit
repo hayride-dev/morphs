@@ -1,0 +1,25 @@
+
+package hayride:mcp@0.0.64;
+
+interface tools {
+    use types.{call-tool-params, call-tool-result, list-tools-result};
+
+    enum error-code {
+        tool-call-failed,
+        tool-not-found,
+        unknown
+    }
+
+    resource error {
+        /// return the error code.
+        code: func() -> error-code;
+        /// errors can propagated with backend specific status through a string value.
+        data: func() -> string;
+    }
+
+    resource tools {
+        constructor();
+        list-tools: func(cursor: string) -> result<list-tools-result, error>;
+        call-tool: func(params: call-tool-params) -> result<call-tool-result, error>;
+    }
+}

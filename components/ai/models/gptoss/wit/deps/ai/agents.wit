@@ -1,0 +1,33 @@
+package hayride:ai@0.0.64;
+
+interface agents {
+    use types.{message};
+    use context.{context};
+    use hayride:mcp/tools@0.0.64.{tools};
+    use hayride:mcp/types@0.0.64.{tool, call-tool-params, call-tool-result};
+
+    enum error-code {
+        capabilities-error,
+        context-error,
+        push-error,
+        execute-error,
+        unknown
+    }
+
+    resource error {
+        /// return the error code.
+        code: func() -> error-code;
+        /// errors can propagated with backend specific status through a string value.
+        data: func() -> string;
+    }
+
+    resource agent {
+        constructor(name: string, instruction: string, tools: option<tools>, context: option<context>);
+        name: func() -> string;
+        instruction: func() -> string;
+        capabilities: func() -> result<list<tool>, error>;
+        context: func() -> result<list<message>, error>;
+        push: func(msg: message) -> result<_, error>;
+        execute: func(params: call-tool-params) -> result<call-tool-result, error>;
+    }
+}
