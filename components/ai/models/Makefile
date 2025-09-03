@@ -12,4 +12,4 @@ OUTPUT ?= llama31.wasm
 
 build: ; tinygo build -tags=$(TAGS) -target wasip2 --wit-package ./wit/ --wit-world llm -o $(OUTPUT) .
 
-build-rust: ; cargo build --target wasm32-wasi --release
+build-rust: ; cd gptoss && cargo build --release --target wasm32-wasip2
