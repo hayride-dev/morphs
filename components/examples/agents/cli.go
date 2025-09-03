@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/hayride-dev/bindings/go/hayride/ai"
 	"github.com/hayride-dev/bindings/go/hayride/ai/agents"
 	"github.com/hayride-dev/bindings/go/hayride/ai/ctx"
 	"github.com/hayride-dev/bindings/go/hayride/ai/graph"
@@ -17,7 +18,6 @@ import (
 	"github.com/hayride-dev/bindings/go/hayride/ai/models/repository"
 	"github.com/hayride-dev/bindings/go/hayride/ai/runner"
 	"github.com/hayride-dev/bindings/go/hayride/mcp/tools"
-	"github.com/hayride-dev/bindings/go/hayride/types"
 	"github.com/hayride-dev/bindings/go/wasi/cli"
 	"go.bytecodealliance.org/cm"
 )
@@ -70,9 +70,9 @@ func main() {
 	}
 
 	// Create a new runner instance
-	runnerOpts := types.RunnerOptions{
+	runnerOpts := ai.RunnerOptions{
 		MaxTurns: 10,
-		Writer:   types.WriterTypeRaw,
+		Writer:   ai.WriterTypeRaw,
 	}
 
 	runner, err := runner.New(runnerOpts)
@@ -90,10 +90,10 @@ func main() {
 			break
 		}
 
-		msg := types.Message{
-			Role: types.RoleUser,
-			Content: cm.ToList([]types.MessageContent{
-				types.NewMessageContent(types.Text(input)),
+		msg := ai.Message{
+			Role: ai.RoleUser,
+			Content: cm.ToList([]ai.MessageContent{
+				ai.NewMessageContent(ai.Text(input)),
 			}),
 		}
 

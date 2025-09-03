@@ -1,3 +1,4 @@
-github.com/hayride-dev/bindings v0.0.64 h1:IiGlhyK1Ou8P/XVhcn6+H7PAiHzT31973zbNW7oCC2Q=
-github.com/hayride-dev/bindings v0.0.64/go.mod h1:kHCyeSMdu2HSfyP8kTdtpxNu0DxQhc8Nvvx1oP0OvSk=
+github.com/hayride-dev/bindings v0.0.65 h1:12RflYoQJyBn7lzkKqlJTTIPcBJmtfVoW28yWzyvXr0=
+github.com/hayride-dev/bindings v0.0.65/go.mod h1:kHCyeSMdu2HSfyP8kTdtpxNu0DxQhc8Nvvx1oP0OvSk=
+github.com/hayride-dev/morphs/components/ai/tools/datetime v0.0.0-20250804175034-e21a389ac7c6/go.mod h1:hpxOg02kM8OIF1J6PCwsRSqN1SBPTaPbo762hkITHa8=
 go.bytecodealliance.org/cm v0.2.0/go.mod h1:JD5vtVNZv7sBoQQkvBvAAVKJPhR/bqBH7yYXTItMfZI=

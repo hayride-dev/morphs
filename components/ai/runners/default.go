@@ -5,19 +5,19 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/hayride-dev/bindings/go/hayride/ai"
 	"github.com/hayride-dev/bindings/go/hayride/ai/agents"
 	"github.com/hayride-dev/bindings/go/hayride/ai/graph"
 	"github.com/hayride-dev/bindings/go/hayride/ai/models"
 	"github.com/hayride-dev/bindings/go/hayride/ai/runner"
 	"github.com/hayride-dev/bindings/go/hayride/ai/runner/export"
-	"github.com/hayride-dev/bindings/go/hayride/types"
 	"go.bytecodealliance.org/cm"
 )
 
 var _ runner.Runner = (*defaultRunner)(nil)
 
 type defaultRunner struct {
-	options types.RunnerOptions
+	options ai.RunnerOptions
 }
 
 // StreamingState tracks the progress of streaming content across different channels
@@ -34,14 +34,14 @@ func init() {
 	export.Runner(constructor)
 }
 
-func constructor(options types.RunnerOptions) (runner.Runner, error) {
+func constructor(options ai.RunnerOptions) (runner.Runner, error) {
 	return &defaultRunner{
 		options: options,
 	}, nil
 }
 
-func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format models.Format, model graph.GraphExecutionContextStream, writer io.Writer) ([]types.Message, error) {
-	messages := make([]types.Message, 0)
+func (r *defaultRunner) Invoke(message ai.Message, agent agents.Agent, format models.Format, model graph.GraphExecutionContextStream, writer io.Writer) ([]ai.Message, error) {
+	messages := make([]ai.Message, 0)
 
 	// If we have a writer, wrap it in a message writer with writer options
 	var messageWriter *runner.Writer
@@ -133,10 +133,10 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 			for i, content := range contentItems {
 				if content.String() == "text" && content.Text() != nil {
 					// Create separate message for each content item
-					separateMsg := types.Message{
+					separateMsg := ai.Message{
 						Role: completeMsg.Role,
-						Content: cm.ToList([]types.MessageContent{
-							types.NewMessageContent(types.Text(*content.Text())),
+						Content: cm.ToList([]ai.MessageContent{
+							ai.NewMessageContent(ai.Text(*content.Text())),
 						}),
 						Final: i == len(contentItems)-1, // Last item is final
 					}
@@ -161,16 +161,16 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 		}
 
 		// Check for tool calls in the complete message
-		if completeMsg.Role == types.RoleAssistant {
+		if completeMsg.Role == ai.RoleAssistant {
 			for _, c := range completeMsg.Content.Slice() {
 				if c.String() == "tool-input" {
 					toolResult, err := agent.Execute(*c.ToolInput())
 					if err != nil {
 						return nil, fmt.Errorf("failed to call tool: %w", err)
 					}
-					toolCallMessage := types.Message{
-						Role:    types.RoleTool,
-						Content: cm.ToList([]types.MessageContent{types.NewMessageContent(*toolResult)}),
+					toolCallMessage := ai.Message{
+						Role:    ai.RoleTool,
+						Content: cm.ToList([]ai.MessageContent{ai.NewMessageContent(*toolResult)}),
 					}
 
 					if err := agent.Push(toolCallMessage); err != nil {
@@ -208,10 +208,10 @@ func (r *defaultRunner) processStreamingContent(currentText string, state *Strea
 		if len(currentText) > len(state.LastFinalContent) {
 			newContent := currentText[len(state.LastFinalContent):]
 			if newContent != "" {
-				deltaMessage := types.Message{
-					Role: types.RoleAssistant,
-					Content: cm.ToList([]types.MessageContent{
-						types.NewMessageContent(types.Text(newContent)),
+				deltaMessage := ai.Message{
+					Role: ai.RoleAssistant,
+					Content: cm.ToList([]ai.MessageContent{
+						ai.NewMessageContent(ai.Text(newContent)),
 					}),
 				}
 				r.streamMessage(messageWriter, deltaMessage)
@@ -222,7 +222,7 @@ func (r *defaultRunner) processStreamingContent(currentText string, state *Strea
 	}
 
 	// Successfully decoded - process different content types
-	if partialMsg.Role == types.RoleAssistant {
+	if partialMsg.Role == ai.RoleAssistant {
 		// Check for tool calls first
 		for _, content := range partialMsg.Content.Slice() {
 			if content.String() == "tool-input" {
@@ -250,10 +250,10 @@ func (r *defaultRunner) processStreamingContent(currentText string, state *Strea
 			if len(currentContent) > len(state.LastFinalContent) {
 				newContent := currentContent[len(state.LastFinalContent):]
 				if newContent != "" {
-					deltaMessage := types.Message{
-						Role: types.RoleAssistant,
-						Content: cm.ToList([]types.MessageContent{
-							types.NewMessageContent(types.Text(newContent)),
+					deltaMessage := ai.Message{
+						Role: ai.RoleAssistant,
+						Content: cm.ToList([]ai.MessageContent{
+							ai.NewMessageContent(ai.Text(newContent)),
 						}),
 					}
 					r.streamMessage(messageWriter, deltaMessage)
@@ -268,10 +268,10 @@ func (r *defaultRunner) processStreamingContent(currentText string, state *Strea
 				if newContent != "" && !state.HasToolCall {
 					// Only stream analysis/commentary if it's substantial and not a tool call
 					if len(newContent) > 10 { // Arbitrary threshold to avoid noise
-						deltaMessage := types.Message{
-							Role: types.RoleAssistant,
-							Content: cm.ToList([]types.MessageContent{
-								types.NewMessageContent(types.Text(newContent)),
+						deltaMessage := ai.Message{
+							Role: ai.RoleAssistant,
+							Content: cm.ToList([]ai.MessageContent{
+								ai.NewMessageContent(ai.Text(newContent)),
 							}),
 						}
 						r.streamMessage(messageWriter, deltaMessage)
@@ -284,7 +284,7 @@ func (r *defaultRunner) processStreamingContent(currentText string, state *Strea
 }
 
 // streamMessage sends a structured AI message through the writer (Ollama-style)
-func (r *defaultRunner) streamMessage(messageWriter *runner.Writer, message types.Message) {
+func (r *defaultRunner) streamMessage(messageWriter *runner.Writer, message ai.Message) {
 	// Always send structured JSON messages, never raw text
 	data, err := json.Marshal(message)
 	if err == nil {

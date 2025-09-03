@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 
-	"github.com/hayride-dev/bindings/go/hayride/types"
+	"github.com/hayride-dev/bindings/go/hayride/x/net/http/server"
 	"github.com/hayride-dev/bindings/go/hayride/x/net/http/server/export"
 )
 
@@ -15,7 +15,7 @@ func init() {
 		w.Write([]byte("Hello, World!"))
 	})
 
-	export.ServerConfig(mux, types.ServerConfig{Address: "localhost:9000"})
+	export.ServerConfig(mux, server.ServerConfig{Address: "localhost:9000"})
 }
 
 func main() {}

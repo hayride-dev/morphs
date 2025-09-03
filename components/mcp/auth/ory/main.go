@@ -26,7 +26,6 @@ type oryProvider struct {
 	contact string
 	apiKey  string
 
-	// Map of generated codes to ory tokens
 	client *http.Client
 }
 
