@@ -29,6 +29,9 @@ register-default-agent:
 register-llama:
 	hayride register --bin ./components/ai/models/llama31.wasm --package hayride:llama31@0.0.1
 
+register-gptoss:
+	hayride register --bin ./components/ai/models/gptoss/target/wasm32-wasip2/release/gptoss.wasm --package hayride:gptoss@0.0.1
+
 register-inmemory:
 	hayride register --bin ./components/ai/contexts/inmemory.wasm --package hayride:inmemory@0.0.1
 
