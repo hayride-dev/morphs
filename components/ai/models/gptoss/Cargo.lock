@@ -1429,6 +1429,7 @@ checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
 [[package]]
 name = "openai-harmony"
 version = "0.0.4"
+source = "git+https://github.com/elewis787/harmony.git?branch=elewis-wasm32-wasip2#707dc7db3f90c9a032801b2430a3350270a65da3"
 dependencies = [
  "anyhow",
  "base64",
