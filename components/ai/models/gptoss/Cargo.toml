@@ -1,0 +1,13 @@
+[package]
+name = "gptoss"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+wit-bindgen = "0.44.0"
+openai-harmony = { git = "https://github.com/elewis787/harmony.git", branch = "elewis-wasm32-wasip2" } 
+anyhow = "1.0"
+
+[lib]
+crate-type = ["cdylib"]
+

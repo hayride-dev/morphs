@@ -2,7 +2,7 @@ package hayride:agent;
 
 let context = new hayride:inmemory@0.0.1 {...}; 
 
-let llama = new hayride:llama31@0.0.1 {...};
+let llama = new hayride:gptoss@0.0.1 {...};
 
 let datetime = new hayride:datetime@0.0.1 {...};
 

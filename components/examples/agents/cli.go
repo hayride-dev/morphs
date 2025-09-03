@@ -26,7 +26,8 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 
 	repo := repository.New()
-	path, err := repo.DownloadModel("bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf")
+	//path, err := repo.DownloadModel("bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf")
+	path, err := repo.DownloadModel("unsloth/gpt-oss-20b-GGUF/gpt-oss-20b-Q2_K.gguf")
 	if err != nil {
 		log.Fatal("failed to download model:", err)
 	}

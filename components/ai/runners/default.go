@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/hayride-dev/bindings/go/hayride/ai/agents"
 	"github.com/hayride-dev/bindings/go/hayride/ai/graph"
@@ -15,12 +14,20 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-const maxturn = 10
-
 var _ runner.Runner = (*defaultRunner)(nil)
 
 type defaultRunner struct {
 	options types.RunnerOptions
+}
+
+// StreamingState tracks the progress of streaming content across different channels
+type StreamingState struct {
+	AccumulatedContent    string
+	LastFinalContent      string
+	LastAnalysisContent   string
+	LastCommentaryContent string
+	HasToolCall           bool
+	IsComplete            bool
 }
 
 func init() {
@@ -57,6 +64,8 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 			return nil, fmt.Errorf("failed to encode context messages: %w", err)
 		}
 
+		fmt.Println("Encoded Message: ", string(data))
+
 		// Call Graph Compute
 		d := graph.TensorDimensions(cm.ToList([]uint32{1}))
 		td := graph.TensorData(cm.ToList(data))
@@ -76,10 +85,21 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 		// read the output from the stream
 		stream := namedTensorStream.F1
 		ts := graph.TensorStream(stream)
-		//
+
 		text := make([]byte, 0)
 		part := make([]byte, 256)
-		var lastDecodedLength int = 0 // Track how much we've already processed
+
+		// Track streaming state for building complete messages
+		streamingState := &StreamingState{
+			AccumulatedContent:    "",
+			LastFinalContent:      "",
+			LastAnalysisContent:   "",
+			LastCommentaryContent: "",
+			HasToolCall:           false,
+			IsComplete:            false,
+		}
+
+		// Stream structured AI messages (Ollama-style) with proper channel handling
 		for {
 			bytesRead, err := ts.Read(part)
 			if bytesRead == 0 || err == io.EOF {
@@ -88,130 +108,188 @@ func (r *defaultRunner) Invoke(message types.Message, agent agents.Agent, format
 				return nil, fmt.Errorf("failed to read from tensor stream: %w", err)
 			}
 			text = append(text, part[:bytesRead]...)
-			// Decode Message
-			msg, err := format.Decode(text) // Gets us our API Message
-			if err != nil {
-				if _, ok := err.(*models.PartialDecodeError); ok {
-					// continue reading
-					continue
-				}
-				return nil, err
+
+			// Try to process streaming content
+			if messageWriter != nil {
+				currentText := string(text)
+				r.processStreamingContent(currentText, streamingState, format, messageWriter)
 			}
+		}
 
-			// Only process if we have new content
-			if len(text) > lastDecodedLength {
-				// Extract only the new text content for streaming
-				if msg.Role == types.RoleAssistant && len(msg.Content.Slice()) > 0 {
-					for _, content := range msg.Content.Slice() {
-						if content.String() == "text" {
-							fullText := *content.Text()
-							// Extract only the new part
-							if len(fullText) > lastDecodedLength {
-								newText := fullText[lastDecodedLength:]
-								if strings.TrimSpace(newText) != "" {
-									// Create a message with just the delta
-									deltaMsg := types.Message{
-										Role: types.RoleAssistant,
-										Content: cm.ToList([]types.MessageContent{
-											types.NewMessageContent(types.Text(newText)),
-										}),
-									}
-									agent.Push(deltaMsg)
-									messages = append(messages, deltaMsg)
+		// After streaming is complete, decode the final complete message
+		fmt.Printf("Complete stream data: %s\n", string(text))
 
-									// write the delta message to the writer if provided
-									if messageWriter != nil {
-										switch r.options.Writer {
-										case types.WriterTypeSse:
-											data, err = json.Marshal(deltaMsg)
-											if err != nil {
-												return nil, fmt.Errorf("failed to marshal delta message: %w", err)
-											}
+		completeMsg, err := format.Decode(text)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode complete stream: %w", err)
+		}
 
-											if _, err := messageWriter.Write(data); err != nil {
-												return nil, fmt.Errorf("failed to write message: %w", err)
-											}
-										default:
-											if _, err := messageWriter.Write([]byte(*deltaMsg.Content.Data().Text())); err != nil {
-												return nil, fmt.Errorf("failed to write message: %w", err)
-											}
-										}
-									}
-								}
-								lastDecodedLength = len(fullText)
-							}
-						} else {
-							// For non-text content (like tool calls), send the complete message
-							agent.Push(*msg)
-							messages = append(messages, *msg)
+		// Handle multiple content items as separate logical messages
+		// This allows format decoders to return multiple channel contents
+		contentItems := completeMsg.Content.Slice()
 
-							data, err := json.Marshal(*msg)
-							if err != nil {
-								return nil, fmt.Errorf("failed to marshal message: %w", err)
-							}
-
-							if messageWriter != nil {
-								if _, err := messageWriter.Write(data); err != nil {
-									return nil, fmt.Errorf("failed to write message: %w", err)
-								}
-							}
-							lastDecodedLength = len(text)
-						}
-					}
-				} else {
-					// For non-assistant messages, send complete message
-					agent.Push(*msg)
-					messages = append(messages, *msg)
-
-					data, err := json.Marshal(*msg)
-					if err != nil {
-						return nil, fmt.Errorf("failed to marshal message: %w", err)
+		if len(contentItems) > 1 {
+			// Multiple content items - treat as separate messages
+			for i, content := range contentItems {
+				if content.String() == "text" && content.Text() != nil {
+					// Create separate message for each content item
+					separateMsg := types.Message{
+						Role: completeMsg.Role,
+						Content: cm.ToList([]types.MessageContent{
+							types.NewMessageContent(types.Text(*content.Text())),
+						}),
+						Final: i == len(contentItems)-1, // Last item is final
 					}
 
+					if err := agent.Push(separateMsg); err != nil {
+						return nil, fmt.Errorf("failed to push separate message to agent: %w", err)
+					}
+					messages = append(messages, separateMsg)
+
+					// Stream each separate message
 					if messageWriter != nil {
-						if _, err := messageWriter.Write(data); err != nil {
-							return nil, fmt.Errorf("failed to write message: %w", err)
-						}
+						r.streamMessage(messageWriter, separateMsg)
 					}
-					lastDecodedLength = len(text)
 				}
 			}
+		} else {
+			// Single content item - handle normally
+			if err := agent.Push(*completeMsg); err != nil {
+				return nil, fmt.Errorf("failed to push complete message to agent: %w", err)
+			}
+			messages = append(messages, *completeMsg)
+		}
 
-			// check for tool call
-			if msg.Role == types.RoleAssistant {
-				for _, c := range msg.Content.Slice() {
-					if c.String() == "tool-input" {
-						toolResult, err := agent.Execute(*c.ToolInput())
-						if err != nil {
-							return nil, fmt.Errorf("failed to call tool: %w", err)
-						}
-						toolCallMessage := types.Message{Role: types.RoleTool, Content: cm.ToList([]types.MessageContent{types.NewMessageContent(*toolResult)})}
-						agent.Push(toolCallMessage)
-						messages = append(messages, toolCallMessage)
-						toolCall = true
+		// Check for tool calls in the complete message
+		if completeMsg.Role == types.RoleAssistant {
+			for _, c := range completeMsg.Content.Slice() {
+				if c.String() == "tool-input" {
+					toolResult, err := agent.Execute(*c.ToolInput())
+					if err != nil {
+						return nil, fmt.Errorf("failed to call tool: %w", err)
+					}
+					toolCallMessage := types.Message{
+						Role:    types.RoleTool,
+						Content: cm.ToList([]types.MessageContent{types.NewMessageContent(*toolResult)}),
+					}
 
-						// Marshal bytes and write
-						if messageWriter != nil {
-							data, err := json.Marshal(toolCallMessage)
-							if err != nil {
-								return nil, fmt.Errorf("failed to marshal tool call message: %w", err)
-							}
+					if err := agent.Push(toolCallMessage); err != nil {
+						return nil, fmt.Errorf("failed to push tool result to agent: %w", err)
+					}
+					messages = append(messages, toolCallMessage)
+					toolCall = true
 
-							if _, err := messageWriter.Write(data); err != nil {
-								return nil, fmt.Errorf("failed to write tool call message: %w", err)
-							}
-						}
+					// Stream tool result as structured message
+					if messageWriter != nil {
+						r.streamMessage(messageWriter, toolCallMessage)
 					}
 				}
 			}
 		}
+
 		if toolCall {
-			continue // If we had a tool call, we need to continue the loop to process the tool result
+			toolCall = false
+			continue
 		}
-		messages[len(messages)-1].Final = true // Mark the last message as final
 		break
 	}
 	return messages, nil
+}
+
+// processStreamingContent handles incremental streaming updates based on Harmony format channels
+func (r *defaultRunner) processStreamingContent(currentText string, state *StreamingState, format models.Format, messageWriter *runner.Writer) {
+	// Update accumulated content
+	state.AccumulatedContent = currentText
+
+	// Try to decode the current content to extract structured information
+	partialMsg, err := format.Decode([]byte(currentText))
+	if err != nil {
+		// If decode fails, check if we have new raw content to stream
+		if len(currentText) > len(state.LastFinalContent) {
+			newContent := currentText[len(state.LastFinalContent):]
+			if newContent != "" {
+				deltaMessage := types.Message{
+					Role: types.RoleAssistant,
+					Content: cm.ToList([]types.MessageContent{
+						types.NewMessageContent(types.Text(newContent)),
+					}),
+				}
+				r.streamMessage(messageWriter, deltaMessage)
+				state.LastFinalContent = currentText
+			}
+		}
+		return
+	}
+
+	// Successfully decoded - process different content types
+	if partialMsg.Role == types.RoleAssistant {
+		// Check for tool calls first
+		for _, content := range partialMsg.Content.Slice() {
+			if content.String() == "tool-input" {
+				if !state.HasToolCall {
+					// Stream the complete tool call message
+					r.streamMessage(messageWriter, *partialMsg)
+					state.HasToolCall = true
+				}
+				return
+			}
+		}
+
+		// Handle text content streaming
+		var currentContent string
+		for _, content := range partialMsg.Content.Slice() {
+			if content.String() == "text" {
+				currentContent = *content.Text()
+				break
+			}
+		}
+
+		// Check if this is final content or intermediate content
+		if partialMsg.Final {
+			// This is final channel content
+			if len(currentContent) > len(state.LastFinalContent) {
+				newContent := currentContent[len(state.LastFinalContent):]
+				if newContent != "" {
+					deltaMessage := types.Message{
+						Role: types.RoleAssistant,
+						Content: cm.ToList([]types.MessageContent{
+							types.NewMessageContent(types.Text(newContent)),
+						}),
+					}
+					r.streamMessage(messageWriter, deltaMessage)
+					state.LastFinalContent = currentContent
+				}
+			}
+		} else {
+			// This might be analysis or commentary content
+			// For now, we stream incremental updates but can be more selective
+			if len(currentContent) > len(state.LastAnalysisContent) {
+				newContent := currentContent[len(state.LastAnalysisContent):]
+				if newContent != "" && !state.HasToolCall {
+					// Only stream analysis/commentary if it's substantial and not a tool call
+					if len(newContent) > 10 { // Arbitrary threshold to avoid noise
+						deltaMessage := types.Message{
+							Role: types.RoleAssistant,
+							Content: cm.ToList([]types.MessageContent{
+								types.NewMessageContent(types.Text(newContent)),
+							}),
+						}
+						r.streamMessage(messageWriter, deltaMessage)
+					}
+					state.LastAnalysisContent = currentContent
+				}
+			}
+		}
+	}
+}
+
+// streamMessage sends a structured AI message through the writer (Ollama-style)
+func (r *defaultRunner) streamMessage(messageWriter *runner.Writer, message types.Message) {
+	// Always send structured JSON messages, never raw text
+	data, err := json.Marshal(message)
+	if err == nil {
+		messageWriter.Write(data)
+	}
 }
 
 func main() {}

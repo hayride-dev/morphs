@@ -1,0 +1,51 @@
+package hayride:ai@0.0.64;
+
+interface model {
+    use types.{message};
+
+    enum error-code {
+        context-error,
+        context-encode,
+        context-decode,
+        compute-error,
+        partial-decode,
+        unknown
+    }
+
+    resource error {
+        /// return the error code.
+        code: func() -> error-code;
+        /// errors can propagated with backend specific status through a string value.
+        data: func() -> string;
+    }
+
+    resource format {
+        constructor();
+        encode: func(messages: list<message>) -> result<list<u8>,error>;
+        decode: func(raw: list<u8>) -> result<message, error>;
+    }
+}
+
+interface model-repository {
+    enum error-code {
+        model-not-found,
+        invalid-model-name,
+        runtime-error,
+        not-enabled,
+        unknown
+    }
+
+    resource error {
+        /// return the error code.
+        code: func() -> error-code;
+        /// errors can propagated with backend specific status through a string value.
+        data: func() -> string;
+    }
+
+    // download a model by name
+    download-model: func(name: string) -> result<string, error>;
+    // get a model by name, returning the path or an error if not found
+    get-model: func(name: string) -> result<string, error>;
+    delete-model: func(name: string) -> result<_, error>;
+    list-models: func() -> result<list<string>, error>;
+}

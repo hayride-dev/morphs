@@ -1,0 +1,6 @@
+package hayride:models@0.0.1;
+
+/// An example world for the component to target.
+world gptoss {
+    export hayride:ai/model@0.0.64;
+}
