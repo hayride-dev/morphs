@@ -3,11 +3,12 @@ package main
 import (
 	"fmt"
 
+	"github.com/hayride-dev/bindings/go/hayride/ai"
 	"github.com/hayride-dev/bindings/go/hayride/ai/agents"
 	"github.com/hayride-dev/bindings/go/hayride/ai/agents/export"
 	"github.com/hayride-dev/bindings/go/hayride/ai/ctx"
+	"github.com/hayride-dev/bindings/go/hayride/mcp"
 	"github.com/hayride-dev/bindings/go/hayride/mcp/tools"
-	"github.com/hayride-dev/bindings/go/hayride/types"
 	"go.bytecodealliance.org/cm"
 )
 
@@ -37,8 +38,8 @@ func constructor(name string, instruction string, tools tools.Tools, context ctx
 
 	// If context is set, push the initial instruction message
 	if context != nil {
-		content := []types.MessageContent{}
-		content = append(content, types.NewMessageContent(types.Text(instruction)))
+		content := []ai.MessageContent{}
+		content = append(content, ai.NewMessageContent(ai.Text(instruction)))
 
 		// If tools are set, list them and append to content
 		if tools != nil {
@@ -49,13 +50,13 @@ func constructor(name string, instruction string, tools tools.Tools, context ctx
 
 			if result.Tools.Len() > 0 {
 				// Append the list of tools to the content
-				content = append(content, types.NewMessageContent(result.Tools))
+				content = append(content, ai.NewMessageContent(result.Tools))
 			}
 		}
 
 		// Push message to the context
-		msg := types.Message{Role: types.RoleSystem, Content: cm.ToList(content)}
-		agent.context.Push(cm.Reinterpret[types.Message](msg))
+		msg := ai.Message{Role: ai.RoleSystem, Content: cm.ToList(content)}
+		agent.context.Push(cm.Reinterpret[ai.Message](msg))
 	}
 
 	return agent, nil
@@ -69,7 +70,7 @@ func (a *defaultAgent) Instruction() string {
 	return a.instruction
 }
 
-func (a *defaultAgent) Capabilities() ([]types.Tool, error) {
+func (a *defaultAgent) Capabilities() ([]mcp.Tool, error) {
 	if a.tools == nil {
 		return nil, fmt.Errorf("tools are not set for agent %s", a.name)
 	}
@@ -82,7 +83,7 @@ func (a *defaultAgent) Capabilities() ([]types.Tool, error) {
 	return result.Tools.Slice(), nil
 }
 
-func (a *defaultAgent) Context() ([]types.Message, error) {
+func (a *defaultAgent) Context() ([]ai.Message, error) {
 	if a.context == nil {
 		return nil, fmt.Errorf("context is not set for agent %s", a.name)
 	}
@@ -95,14 +96,14 @@ func (a *defaultAgent) Context() ([]types.Message, error) {
 	return msgs, nil
 }
 
-func (a *defaultAgent) Push(msg types.Message) error {
+func (a *defaultAgent) Push(msg ai.Message) error {
 	if a.context == nil {
 		return fmt.Errorf("context is not set for agent %s", a.name)
 	}
-	return a.context.Push(cm.Reinterpret[types.Message](msg))
+	return a.context.Push(cm.Reinterpret[ai.Message](msg))
 }
 
-func (a *defaultAgent) Execute(params types.CallToolParams) (*types.CallToolResult, error) {
+func (a *defaultAgent) Execute(params mcp.CallToolParams) (*mcp.CallToolResult, error) {
 	if a.tools == nil {
 		return nil, fmt.Errorf("tools are not set for agent %s", a.name)
 	}

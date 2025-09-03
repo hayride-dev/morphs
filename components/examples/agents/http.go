@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/hayride-dev/bindings/go/hayride/ai"
 	"github.com/hayride-dev/bindings/go/hayride/ai/agents"
 	"github.com/hayride-dev/bindings/go/hayride/ai/ctx"
 	"github.com/hayride-dev/bindings/go/hayride/ai/graph"
@@ -15,7 +16,7 @@ import (
 	"github.com/hayride-dev/bindings/go/hayride/ai/models/repository"
 	"github.com/hayride-dev/bindings/go/hayride/ai/runner"
 	"github.com/hayride-dev/bindings/go/hayride/mcp/tools"
-	"github.com/hayride-dev/bindings/go/hayride/types"
+	"github.com/hayride-dev/bindings/go/hayride/x/net/http/server"
 	"github.com/hayride-dev/bindings/go/hayride/x/net/http/server/export"
 	"go.bytecodealliance.org/cm"
 )
@@ -25,7 +26,7 @@ type promptReq struct {
 }
 
 type promptResp struct {
-	Result []types.Message `json:"result"`
+	Result []ai.Message `json:"result"`
 }
 
 func init() {
@@ -51,9 +52,9 @@ func init() {
 	}
 
 	// Create a new runner instance with SSE formatting enabled
-	runnerOpts := types.RunnerOptions{
+	runnerOpts := ai.RunnerOptions{
 		MaxTurns: 10,
-		Writer:   types.WriterTypeSse,
+		Writer:   ai.WriterTypeSse,
 	}
 
 	runner, err := runner.New(runnerOpts)
@@ -69,7 +70,7 @@ func init() {
 	mux.HandleFunc("/generate", h.handlerFunc)
 
 	// Configure the address for the spawned HTTP server
-	export.ServerConfig(mux, types.ServerConfig{
+	export.ServerConfig(mux, server.ServerConfig{
 		Address: "http://localhost:8083",
 	})
 }
@@ -90,10 +91,10 @@ func (h *handler) handlerFunc(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println("Received message:", req.Message)
 
-	msg := types.Message{
-		Role: types.RoleUser,
-		Content: cm.ToList([]types.MessageContent{
-			types.NewMessageContent(types.Text(req.Message)),
+	msg := ai.Message{
+		Role: ai.RoleUser,
+		Content: cm.ToList([]ai.MessageContent{
+			ai.NewMessageContent(ai.Text(req.Message)),
 		}),
 	}
 

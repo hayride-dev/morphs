@@ -6,8 +6,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/hayride-dev/bindings/go/hayride/ai"
 	"github.com/hayride-dev/bindings/go/hayride/ai/models"
-	"github.com/hayride-dev/bindings/go/hayride/types"
+	"github.com/hayride-dev/bindings/go/hayride/mcp"
 	"go.bytecodealliance.org/cm"
 )
 
@@ -108,7 +109,7 @@ func (m *llama3) isMidWord(text string) bool {
 		(lastChar >= '0' && lastChar <= '9')
 }
 
-func (m *llama3) Decode(data []byte) (*types.Message, error) {
+func (m *llama3) Decode(data []byte) (*ai.Message, error) {
 	text := string(data)
 
 	// If we don't have any content, return partial decode error
@@ -139,12 +140,12 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 			}
 
 			// Return as partial assistant message for streaming
-			content := []types.MessageContent{
-				types.NewMessageContent(types.Text(trimmedText)),
+			content := []ai.MessageContent{
+				ai.NewMessageContent(ai.Text(trimmedText)),
 			}
 
-			return &types.Message{
-				Role:    types.RoleAssistant,
+			return &ai.Message{
+				Role:    ai.RoleAssistant,
 				Content: cm.ToList(content),
 			}, nil
 		}
@@ -156,8 +157,8 @@ func (m *llama3) Decode(data []byte) (*types.Message, error) {
 	return m.parseStructuredMessage(text)
 }
 
-func (m *llama3) parseFunctionCallContent(content string) (*types.Message, error) {
-	var messageContents []types.MessageContent
+func (m *llama3) parseFunctionCallContent(content string) (*ai.Message, error) {
+	var messageContents []ai.MessageContent
 
 	functionMatches := customFunc.FindAllStringSubmatch(content, -1)
 	for _, match := range functionMatches {
@@ -183,25 +184,25 @@ func (m *llama3) parseFunctionCallContent(content string) (*types.Message, error
 			arguments = append(arguments, [2]string{key, valueStr})
 		}
 
-		toolCall := types.CallToolParams{
+		toolCall := mcp.CallToolParams{
 			Name:      functionName,
 			Arguments: cm.ToList(arguments),
 		}
 
-		messageContents = append(messageContents, types.NewMessageContent(toolCall))
+		messageContents = append(messageContents, ai.NewMessageContent(toolCall))
 	}
 
 	if len(messageContents) == 0 {
 		return nil, &models.PartialDecodeError{}
 	}
 
-	return &types.Message{
-		Role:    types.RoleAssistant,
+	return &ai.Message{
+		Role:    ai.RoleAssistant,
 		Content: cm.ToList(messageContents),
 	}, nil
 }
 
-func (m *llama3) parseStructuredMessage(text string) (*types.Message, error) {
+func (m *llama3) parseStructuredMessage(text string) (*ai.Message, error) {
 	// Find the last complete message in the text
 	headerPattern := regexp.MustCompile(startHeaderId + `([^<]+)` + endHeaderId)
 	headerMatches := headerPattern.FindAllStringSubmatch(text, -1)
@@ -253,7 +254,7 @@ func (m *llama3) parseStructuredMessage(text string) (*types.Message, error) {
 	}
 }
 
-func (m *llama3) parseAssistantMessage(content string, hasEndToken bool) (*types.Message, error) {
+func (m *llama3) parseAssistantMessage(content string, hasEndToken bool) (*ai.Message, error) {
 	// Clean content of end tokens for processing
 	cleanContent := content
 	cleanContent = strings.Replace(cleanContent, endOfTurn, "", -1)
@@ -261,7 +262,7 @@ func (m *llama3) parseAssistantMessage(content string, hasEndToken bool) (*types
 	cleanContent = strings.Replace(cleanContent, endOfText, "", -1)
 	cleanContent = strings.TrimSpace(cleanContent)
 
-	var messageContents []types.MessageContent
+	var messageContents []ai.MessageContent
 
 	// Check for function calls using the custom function pattern
 	functionMatches := customFunc.FindAllStringSubmatch(cleanContent, -1)
@@ -296,12 +297,12 @@ func (m *llama3) parseAssistantMessage(content string, hasEndToken bool) (*types
 				arguments = append(arguments, [2]string{key, valueStr})
 			}
 
-			toolCall := types.CallToolParams{
+			toolCall := mcp.CallToolParams{
 				Name:      functionName,
 				Arguments: cm.ToList(arguments),
 			}
 
-			messageContents = append(messageContents, types.NewMessageContent(toolCall))
+			messageContents = append(messageContents, ai.NewMessageContent(toolCall))
 		}
 
 		// For function calls, we need the end of message token to be complete
@@ -325,7 +326,7 @@ func (m *llama3) parseAssistantMessage(content string, hasEndToken bool) (*types
 
 		// For text responses, we can stream partial content
 		if cleanContent != "" {
-			messageContents = append(messageContents, types.NewMessageContent(types.Text(cleanContent)))
+			messageContents = append(messageContents, ai.NewMessageContent(ai.Text(cleanContent)))
 		}
 	}
 
@@ -333,13 +334,13 @@ func (m *llama3) parseAssistantMessage(content string, hasEndToken bool) (*types
 		return nil, &models.PartialDecodeError{}
 	}
 
-	return &types.Message{
-		Role:    types.RoleAssistant,
+	return &ai.Message{
+		Role:    ai.RoleAssistant,
 		Content: cm.ToList(messageContents),
 	}, nil
 }
 
-func (m *llama3) parseSystemMessage(content string, hasEndToken bool) (*types.Message, error) {
+func (m *llama3) parseSystemMessage(content string, hasEndToken bool) (*ai.Message, error) {
 	// Clean content of end tokens
 	cleanContent := strings.Replace(content, endOfTurn, "", -1)
 	cleanContent = strings.TrimSpace(cleanContent)
@@ -348,17 +349,17 @@ func (m *llama3) parseSystemMessage(content string, hasEndToken bool) (*types.Me
 		return nil, &models.PartialDecodeError{}
 	}
 
-	messageContents := []types.MessageContent{
-		types.NewMessageContent(types.Text(cleanContent)),
+	messageContents := []ai.MessageContent{
+		ai.NewMessageContent(ai.Text(cleanContent)),
 	}
 
-	return &types.Message{
-		Role:    types.RoleSystem,
+	return &ai.Message{
+		Role:    ai.RoleSystem,
 		Content: cm.ToList(messageContents),
 	}, nil
 }
 
-func (m *llama3) parseUserMessage(content string, hasEndToken bool) (*types.Message, error) {
+func (m *llama3) parseUserMessage(content string, hasEndToken bool) (*ai.Message, error) {
 	// Clean content of end tokens
 	cleanContent := strings.Replace(content, endOfTurn, "", -1)
 	cleanContent = strings.TrimSpace(cleanContent)
@@ -367,17 +368,17 @@ func (m *llama3) parseUserMessage(content string, hasEndToken bool) (*types.Mess
 		return nil, &models.PartialDecodeError{}
 	}
 
-	messageContents := []types.MessageContent{
-		types.NewMessageContent(types.Text(cleanContent)),
+	messageContents := []ai.MessageContent{
+		ai.NewMessageContent(ai.Text(cleanContent)),
 	}
 
-	return &types.Message{
-		Role:    types.RoleUser,
+	return &ai.Message{
+		Role:    ai.RoleUser,
 		Content: cm.ToList(messageContents),
 	}, nil
 }
 
-func (m *llama3) parseToolMessage(content string, hasEndToken bool) (*types.Message, error) {
+func (m *llama3) parseToolMessage(content string, hasEndToken bool) (*ai.Message, error) {
 	// Clean content of end tokens
 	cleanContent := strings.Replace(content, endOfTurn, "", -1)
 	cleanContent = strings.TrimSpace(cleanContent)
@@ -387,22 +388,22 @@ func (m *llama3) parseToolMessage(content string, hasEndToken bool) (*types.Mess
 	}
 
 	// Tool messages are typically just text content
-	messageContents := []types.MessageContent{
-		types.NewMessageContent(types.Text(cleanContent)),
+	messageContents := []ai.MessageContent{
+		ai.NewMessageContent(ai.Text(cleanContent)),
 	}
 
-	return &types.Message{
-		Role:    types.RoleTool,
+	return &ai.Message{
+		Role:    ai.RoleTool,
 		Content: cm.ToList(messageContents),
 	}, nil
 }
 
-func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
+func (m *llama3) Encode(messages ...ai.Message) ([]byte, error) {
 	builder := &strings.Builder{}
 
 	for i, msg := range messages {
 		switch msg.Role {
-		case types.RoleSystem:
+		case ai.RoleSystem:
 			// System message header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, system, endHeaderId))
 
@@ -410,7 +411,7 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 			builder.WriteString(fmt.Sprintf("%s\n\n", env))
 
 			// Process system message content
-			tools := []types.Tool{}
+			tools := []mcp.Tool{}
 			for _, content := range msg.Content.Slice() {
 				switch content.String() {
 				case "text":
@@ -433,7 +434,7 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 			// End system message turn
 			builder.WriteString(endOfTurn)
 
-		case types.RoleUser:
+		case ai.RoleUser:
 			// User message header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, user, endHeaderId))
 
@@ -448,7 +449,7 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 			// End user message turn
 			builder.WriteString(fmt.Sprintf("%s", endOfTurn))
 
-		case types.RoleAssistant:
+		case ai.RoleAssistant:
 			// Assistant message header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, assistant, endHeaderId))
 
@@ -491,13 +492,13 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 			// End assistant message appropriately
 			// If this is a tool call, use end of message token
 			// If this is regular text, use end of turn token
-			if i < len(messages)-1 && messages[i+1].Role == types.RoleTool {
+			if i < len(messages)-1 && messages[i+1].Role == ai.RoleTool {
 				builder.WriteString(endOfMessage)
 			} else if hasContent {
 				builder.WriteString(endOfTurn)
 			}
 
-		case types.RoleTool:
+		case ai.RoleTool:
 			// Tool (ipython) message header
 			builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, tool, endHeaderId))
 
@@ -545,14 +546,14 @@ func (m *llama3) Encode(messages ...types.Message) ([]byte, error) {
 	}
 
 	// If the last message is not from assistant, add assistant header to prompt for response
-	if len(messages) > 0 && messages[len(messages)-1].Role != types.RoleAssistant {
+	if len(messages) > 0 && messages[len(messages)-1].Role != ai.RoleAssistant {
 		builder.WriteString(fmt.Sprintf("%s%s%s\n", startHeaderId, assistant, endHeaderId))
 	}
 
 	return []byte(builder.String()), nil
 }
 
-func customToolEncode(tools []types.Tool) string {
+func customToolEncode(tools []mcp.Tool) string {
 	if len(tools) == 0 {
 		return ""
 	}

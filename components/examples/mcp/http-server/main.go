@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/hayride-dev/bindings/go/hayride/mcp/tools"
-	"github.com/hayride-dev/bindings/go/hayride/types"
+	"github.com/hayride-dev/bindings/go/hayride/x/net/http/server"
 	"github.com/hayride-dev/bindings/go/hayride/x/net/http/server/export"
-	"github.com/hayride-dev/bindings/go/mcp/server"
+	mcpserver "github.com/hayride-dev/bindings/go/mcp/server"
 )
 
 func init() {
@@ -27,17 +27,17 @@ func init() {
 	*/
 
 	// Create the MCP server router with the tools and auth provider
-	mux, err := server.NewMCPRouter(
-		server.WithName("MCP Server"),
-		server.WithVersion("0.0.1"),
-		server.WithTools(toolbox),
+	mux, err := mcpserver.NewMCPRouter(
+		mcpserver.WithName("MCP Server"),
+		mcpserver.WithVersion("0.0.1"),
+		mcpserver.WithTools(toolbox),
 		// server.WithAuthProvider(provider),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create MCP server: %v", err))
 	}
 
-	export.ServerConfig(mux, types.ServerConfig{
+	export.ServerConfig(mux, server.ServerConfig{
 		Address: "http://localhost:8083",
 	})
 }

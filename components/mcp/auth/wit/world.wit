@@ -1,9 +1,9 @@
 package hayride:mcp@0.0.1;
 
 world auth {
-    include hayride:wasip2/imports@0.0.64;
+    include hayride:wasip2/imports@0.0.65;
 
     import wasi:http/outgoing-handler@0.2.0;
     
-    export hayride:mcp/auth@0.0.64;
+    export hayride:mcp/auth@0.0.65;
 }

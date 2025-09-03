@@ -4,7 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hayride-dev/bindings/go/hayride/types"
+	"github.com/hayride-dev/bindings/go/hayride/ai"
+	"github.com/hayride-dev/bindings/go/hayride/mcp"
 	"go.bytecodealliance.org/cm"
 )
 
@@ -15,14 +16,14 @@ func TestDecode(t *testing.T) {
 		wantText     string
 		wantToolName string
 		wantToolArgs [][2]string
-		wantRole     types.Role
+		wantRole     ai.Role
 		wantErr      bool
 	}{
 		{
 			name:     "basic decode",
 			input:    []byte("Hello, world!"),
 			wantText: "Hello, world!",
-			wantRole: types.RoleAssistant,
+			wantRole: ai.RoleAssistant,
 			wantErr:  false,
 		},
 		{
@@ -30,7 +31,7 @@ func TestDecode(t *testing.T) {
 			input:        []byte("<function=example_function_name>{\"example_name\": \"example_value\"}</function>"),
 			wantToolName: "example_function_name",
 			wantToolArgs: [][2]string{{"example_name", "example_value"}},
-			wantRole:     types.RoleAssistant,
+			wantRole:     ai.RoleAssistant,
 			wantErr:      false,
 		},
 	}
@@ -92,17 +93,17 @@ func TestEncode_BasicConversation(t *testing.T) {
 	model := &llama3{}
 
 	// Create a basic conversation: system + user message
-	messages := []types.Message{
+	messages := []ai.Message{
 		{
-			Role: types.RoleSystem,
-			Content: cm.ToList([]types.MessageContent{
-				types.NewMessageContent(types.Text("You are a helpful assistant.")),
+			Role: ai.RoleSystem,
+			Content: cm.ToList([]ai.MessageContent{
+				ai.NewMessageContent(ai.Text("You are a helpful assistant.")),
 			}),
 		},
 		{
-			Role: types.RoleUser,
-			Content: cm.ToList([]types.MessageContent{
-				types.NewMessageContent(types.Text("Hello, how are you?")),
+			Role: ai.RoleUser,
+			Content: cm.ToList([]ai.MessageContent{
+				ai.NewMessageContent(ai.Text("Hello, how are you?")),
 			}),
 		},
 	}
@@ -167,17 +168,17 @@ func TestEncode_WithAssistantResponse(t *testing.T) {
 	model := &llama3{}
 
 	// Create conversation with assistant response
-	messages := []types.Message{
+	messages := []ai.Message{
 		{
-			Role: types.RoleUser,
-			Content: cm.ToList([]types.MessageContent{
-				types.NewMessageContent(types.Text("Hello")),
+			Role: ai.RoleUser,
+			Content: cm.ToList([]ai.MessageContent{
+				ai.NewMessageContent(ai.Text("Hello")),
 			}),
 		},
 		{
-			Role: types.RoleAssistant,
-			Content: cm.ToList([]types.MessageContent{
-				types.NewMessageContent(types.Text("Hi there!")),
+			Role: ai.RoleAssistant,
+			Content: cm.ToList([]ai.MessageContent{
+				ai.NewMessageContent(ai.Text("Hi there!")),
 			}),
 		},
 	}
@@ -215,17 +216,17 @@ func TestEncode_ToolCall(t *testing.T) {
 	model := &llama3{}
 
 	// Create a tool call scenario
-	messages := []types.Message{
+	messages := []ai.Message{
 		{
-			Role: types.RoleUser,
-			Content: cm.ToList([]types.MessageContent{
-				types.NewMessageContent(types.Text("What's the weather?")),
+			Role: ai.RoleUser,
+			Content: cm.ToList([]ai.MessageContent{
+				ai.NewMessageContent(ai.Text("What's the weather?")),
 			}),
 		},
 		{
-			Role: types.RoleAssistant,
-			Content: cm.ToList([]types.MessageContent{
-				types.NewMessageContent(types.CallToolParams{
+			Role: ai.RoleAssistant,
+			Content: cm.ToList([]ai.MessageContent{
+				ai.NewMessageContent(mcp.CallToolParams{
 					Name: "get_weather",
 					Arguments: cm.ToList([][2]string{
 						{"location", "New York"},
@@ -234,9 +235,9 @@ func TestEncode_ToolCall(t *testing.T) {
 			}),
 		},
 		{
-			Role: types.RoleTool,
-			Content: cm.ToList([]types.MessageContent{
-				types.NewMessageContent(types.Text("It's sunny, 72°F")),
+			Role: ai.RoleTool,
+			Content: cm.ToList([]ai.MessageContent{
+				ai.NewMessageContent(ai.Text("It's sunny, 72°F")),
 			}),
 		},
 	}

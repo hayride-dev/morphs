@@ -6,8 +6,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/hayride-dev/bindings/go/hayride/ai"
 	"github.com/hayride-dev/bindings/go/hayride/ai/models"
-	"github.com/hayride-dev/bindings/go/hayride/types"
+	"github.com/hayride-dev/bindings/go/hayride/mcp"
 	"go.bytecodealliance.org/cm"
 )
 
@@ -37,7 +38,7 @@ func ConstructorQwen_2_5() (models.Format, error) {
 
 type qwen25 struct{}
 
-func (m *qwen25) Decode(data []byte) (*types.Message, error) {
+func (m *qwen25) Decode(data []byte) (*ai.Message, error) {
 	content := string(data)
 
 	// Check if this is a tool call response
@@ -80,10 +81,10 @@ func (m *qwen25) Decode(data []byte) (*types.Message, error) {
 			args = append(args, [2]string{k, valueStr})
 		}
 
-		return &types.Message{
-			Role: types.RoleAssistant,
-			Content: cm.ToList([]types.MessageContent{
-				types.NewMessageContent(types.CallToolParams{
+		return &ai.Message{
+			Role: ai.RoleAssistant,
+			Content: cm.ToList([]ai.MessageContent{
+				ai.NewMessageContent(mcp.CallToolParams{
 					Name:      toolCallData.Name,
 					Arguments: cm.ToList(args),
 				}),
@@ -92,24 +93,24 @@ func (m *qwen25) Decode(data []byte) (*types.Message, error) {
 	}
 
 	// Regular text message
-	return &types.Message{
-		Role: types.RoleAssistant,
-		Content: cm.ToList([]types.MessageContent{
-			types.NewMessageContent(types.Text(content)),
+	return &ai.Message{
+		Role: ai.RoleAssistant,
+		Content: cm.ToList([]ai.MessageContent{
+			ai.NewMessageContent(ai.Text(content)),
 		}),
 	}, nil
 }
 
-func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
+func (m *qwen25) Encode(messages ...ai.Message) ([]byte, error) {
 	builder := &strings.Builder{}
 
 	// Track if we have tools available
-	var tools []types.Tool
+	var tools []mcp.Tool
 	hasTools := false
 
 	// First pass: collect tools from system message
 	for _, msg := range messages {
-		if msg.Role == types.RoleSystem {
+		if msg.Role == ai.RoleSystem {
 			for _, content := range msg.Content.Slice() {
 				if content.String() == "tools" {
 					tools = content.Tools().Slice()
@@ -124,7 +125,7 @@ func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
 	// Process messages
 	for i, msg := range messages {
 		switch msg.Role {
-		case types.RoleSystem:
+		case ai.RoleSystem:
 			builder.WriteString(fmt.Sprintf("%ssystem\n", imStart))
 
 			// Add system content
@@ -173,7 +174,7 @@ func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
 
 			builder.WriteString(fmt.Sprintf("%s\n", imEnd))
 
-		case types.RoleUser:
+		case ai.RoleUser:
 			builder.WriteString(fmt.Sprintf("%suser\n", imStart))
 
 			for _, content := range msg.Content.Slice() {
@@ -185,7 +186,7 @@ func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
 
 			builder.WriteString(fmt.Sprintf("%s\n", imEnd))
 
-		case types.RoleAssistant:
+		case ai.RoleAssistant:
 			builder.WriteString(fmt.Sprintf("%sassistant", imStart))
 
 			for _, content := range msg.Content.Slice() {
@@ -219,9 +220,9 @@ func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
 
 			builder.WriteString(fmt.Sprintf("%s\n", imEnd))
 
-		case types.RoleTool:
+		case ai.RoleTool:
 			// Check if this is the first tool message or if the previous message was not a tool
-			if i == 0 || messages[i-1].Role != types.RoleTool {
+			if i == 0 || messages[i-1].Role != ai.RoleTool {
 				builder.WriteString(fmt.Sprintf("%suser", imStart))
 			}
 
@@ -259,7 +260,7 @@ func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
 			builder.WriteString(fmt.Sprintf("\n%s", toolResponseEnd))
 
 			// Check if this is the last tool message or if the next message is not a tool
-			if i == len(messages)-1 || messages[i+1].Role != types.RoleTool {
+			if i == len(messages)-1 || messages[i+1].Role != ai.RoleTool {
 				builder.WriteString(fmt.Sprintf("%s\n", imEnd))
 			}
 
@@ -269,7 +270,7 @@ func (m *qwen25) Encode(messages ...types.Message) ([]byte, error) {
 	}
 
 	// Add generation prompt if the last message is not from assistant
-	if len(messages) > 0 && messages[len(messages)-1].Role != types.RoleAssistant {
+	if len(messages) > 0 && messages[len(messages)-1].Role != ai.RoleAssistant {
 		builder.WriteString(fmt.Sprintf("%sassistant\n", imStart))
 	}
 
